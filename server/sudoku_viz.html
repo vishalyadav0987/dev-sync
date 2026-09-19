@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Sudoku Backtracking Analyzer</title>
+<style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1e1e1e; color: #d4d4d4; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    
+    /* Live Variables Dashboard */
+    #dashboard { background: #2d2d30; padding: 15px 20px; display: flex; flex-wrap: wrap; gap: 15px; border-bottom: 2px solid #007acc; font-family: monospace; font-size: 15px; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 10; }
+    .var-box { background: #1e1e1e; border: 1px solid #555; padding: 4px 12px; border-radius: 4px; display: flex; gap: 8px; min-width: 60px; justify-content: space-between; }
+    .var-name { color: #569cd6; font-weight: bold; }
+    .var-val { color: #b5cea8; }
+    
+    /* Main Layout */
+    #main-container { display: flex; flex: 1; overflow: hidden; }
+    
+    /* Left Panel: Board & Controls */
+    #left-panel { flex: 1; padding: 20px; display: flex; flex-direction: column; align-items: center; border-right: 1px solid #333; overflow-y: auto; }
+    
+    #board { display: grid; grid-template-columns: repeat(9, 40px); background: #555; border: 3px solid #ccc; margin-bottom: 20px; }
+    .cell { width: 40px; height: 40px; display: flex; justify-content: center; align-items: center; font-size: 20px; font-weight: bold; background: #1e1e1e; border: 1px solid #333; color: #fff; box-sizing: border-box; }
+    
+    /* 3x3 Grid Borders */
+    .cell.right-thick { border-right: 2px solid #ccc; }
+    .cell.bottom-thick { border-bottom: 2px solid #ccc; }
+    
+    /* Highlight States */
+    .cell.initial { color: #aaa; }
+    .cell.active { background: #ffeb3b !important; color: #000; box-shadow: inset 0 0 5px #000; } /* Current placing */
+    .cell.checking { background: #007acc; color: #fff; } /* isSafe scanning */
+    .cell.danger { background: #f44336; color: #fff; } /* Conflict found */
+    .cell.backtrack { background: #9cdcfe !important; color: #000; } /* Backtracking */
+    .cell.success { color: #4caf50; }
+
+    .controls { display: flex; gap: 10px; margin-bottom: 10px; }
+    button { padding: 8px 16px; font-size: 14px; cursor: pointer; background: #007acc; color: white; border: none; border-radius: 4px; font-weight: bold; }
+    button:hover { background: #005f9e; }
+    button:disabled { background: #555; cursor: not-allowed; }
+    
+    #status { margin-top: 10px; font-size: 16px; min-height: 40px; text-align: center; color: #ce9178; font-family: monospace; }
+
+    /* Right Panel: Code */
+    #right-panel { flex: 1; background: #1e1e1e; padding: 20px; overflow-y: auto; font-family: Consolas, 'Courier New', monospace; font-size: 14px; line-height: 1.5; white-space: pre; position: relative; }
+    .code-line { display: flex; padding: 2px 0; border-radius: 3px; }
+    .line-num { color: #858585; width: 30px; text-align: right; margin-right: 15px; user-select: none; }
+    .code-text { color: #d4d4d4; }
+    .code-line.active-line { background: #264f78; border-left: 3px solid #569cd6; }
+    
+    /* Syntax highlighting */
+    .kw { color: #569cd6; }
+    .type { color: #4ec9b0; }
+    .func { color: #dcdcaa; }
+    .str { color: #ce9178; }
+    .comment { color: #6a9955; }
+</style>
+</head>
+<body>
+
+    <div id="dashboard">
+        <div class="var-box"><span class="var-name">row</span><span class="var-val" id="var-row">-</span></div>
+        <div class="var-box"><span class="var-name">col</span><span class="var-val" id="var-col">-</span></div>
+        <div class="var-box"><span class="var-name">dig</span><span class="var-val" id="var-dig">-</span></div>
+        <div class="var-box"><span class="var-name">j</span><span class="var-val" id="var-j">-</span></div>
+        <div class="var-box"><span class="var-name">i</span><span class="var-val" id="var-i">-</span></div>
+        <div class="var-box"><span class="var-name">stRow</span><span class="var-val" id="var-strow">-</span></div>
+        <div class="var-box"><span class="var-name">stCol</span><span class="var-val" id="var-stcol">-</span></div>
+        <div class="var-box"><span class="var-name">sr</span><span class="var-val" id="var-sr">-</span></div>
+        <div class="var-box"><span class="var-name">sc</span><span class="var-val" id="var-sc">-</span></div>
+    </div>
+
+    <div id="main-container">
+        <div id="left-panel">
+            <div id="board"></div>
+            <div class="controls">
+                <button id="btn-prev" onclick="stepBack()" disabled>◄ Previous Step</button>
+                <button id="btn-next" onclick="stepForward()">Next Step ►</button>
+                <button id="btn-auto" onclick="toggleAuto()">Auto Run</button>
+            </div>
+            <div id="status">Ready to analyze.</div>
+        </div>
+
+        <div id="right-panel">
+<div class="code-line" id="line-1"><span class="line-num">1</span><span class="code-text"><span class="kw">class</span> <span class="type">Solution</span> {</span></div>
+<div class="code-line" id="line-2"><span class="line-num">2</span><span class="code-text"><span class="kw">public</span>:</span></div>
+<div class="code-line" id="line-3"><span class="line-num">3</span><span class="code-text">    <span class="type">bool</span> <span class="func">isSafe</span>(<span class="type">vector</span>&lt;<span class="type">vector</span>&lt;<span class="type">char</span>&gt;&gt;& board, <span class="type">int</span> row, <span class="type">int</span> col, <span class="type">char</span> dig){</span></div>
+<div class="code-line" id="line-4"><span class="line-num">4</span><span class="code-text">        <span class="comment">// horizontal checking</span></span></div>
+<div class="code-line" id="line-5"><span class="line-num">5</span><span class="code-text">        <span class="kw">for</span>(<span class="type">int</span> j=0; j&lt;9; j++){</span></div>
+<div class="code-line" id="line-6"><span class="line-num">6</span><span class="code-text">            <span class="kw">if</span>(board[row][j] == dig){</span></div>
+<div class="code-line" id="line-7"><span class="line-num">7</span><span class="code-text">                <span class="kw">return</span> <span class="kw">false</span>;</span></div>
+<div class="code-line" id="line-8"><span class="line-num">8</span><span class="code-text">            }</span></div>
+<div class="code-line" id="line-9"><span class="line-num">9</span><span class="code-text">        }</span></div>
+<div class="code-line" id="line-10"><span class="line-num">10</span><span class="code-text"></span></div>
+<div class="code-line" id="line-11"><span class="line-num">11</span><span class="code-text">        <span class="comment">// vertically checking</span></span></div>
+<div class="code-line" id="line-12"><span class="line-num">12</span><span class="code-text">        <span class="kw">for</span>(<span class="type">int</span> i=0; i&lt;9; i++){</span></div>
+<div class="code-line" id="line-13"><span class="line-num">13</span><span class="code-text">            <span class="kw">if</span>(board[i][col] == dig){</span></div>
+<div class="code-line" id="line-14"><span class="line-num">14</span><span class="code-text">                <span class="kw">return</span> <span class="kw">false</span>;</span></div>
+<div class="code-line" id="line-15"><span class="line-num">15</span><span class="code-text">            }</span></div>
+<div class="code-line" id="line-16"><span class="line-num">16</span><span class="code-text">        }</span></div>
+<div class="code-line" id="line-17"><span class="line-num">17</span><span class="code-text"></span></div>
+<div class="code-line" id="line-18"><span class="line-num">18</span><span class="code-text">        <span class="type">int</span> stRow = (row/3) * 3;</span></div>
+<div class="code-line" id="line-19"><span class="line-num">19</span><span class="code-text">        <span class="type">int</span> stCol = (col/3) * 3;</span></div>
+<div class="code-line" id="line-20"><span class="line-num">20</span><span class="code-text"></span></div>
+<div class="code-line" id="line-21"><span class="line-num">21</span><span class="code-text">        <span class="kw">for</span>(<span class="type">int</span> sr=stRow; sr&lt;=stRow+2; sr++){</span></div>
+<div class="code-line" id="line-22"><span class="line-num">22</span><span class="code-text">            <span class="kw">for</span>(<span class="type">int</span> sc=stCol; sc&lt;=stCol+2; sc++){</span></div>
+<div class="code-line" id="line-23"><span class="line-num">23</span><span class="code-text">                <span class="kw">if</span>(board[sr][sc] == dig){</span></div>
+<div class="code-line" id="line-24"><span class="line-num">24</span><span class="code-text">                    <span class="kw">return</span> <span class="kw">false</span>;</span></div>
+<div class="code-line" id="line-25"><span class="line-num">25</span><span class="code-text">                }</span></div>
+<div class="code-line" id="line-26"><span class="line-num">26</span><span class="code-text">            }</span></div>
+<div class="code-line" id="line-27"><span class="line-num">27</span><span class="code-text">        }</span></div>
+<div class="code-line" id="line-28"><span class="line-num">28</span><span class="code-text">        <span class="kw">return</span> <span class="kw">true</span>;</span></div>
+<div class="code-line" id="line-29"><span class="line-num">29</span><span class="code-text">    }</span></div>
+<div class="code-line" id="line-30"><span class="line-num">30</span><span class="code-text"></span></div>
+<div class="code-line" id="line-31"><span class="line-num">31</span><span class="code-text">    <span class="type">bool</span> <span class="func">solve</span>(<span class="type">vector</span>&lt;<span class="type">vector</span>&lt;<span class="type">char</span>&gt;&gt;& board, <span class="type">int</span> row, <span class="type">int</span> col) {</span></div>
+<div class="code-line" id="line-32"><span class="line-num">32</span><span class="code-text">        <span class="kw">if</span> (row == 9) {</span></div>
+<div class="code-line" id="line-33"><span class="line-num">33</span><span class="code-text">            <span class="kw">return</span> <span class="kw">true</span>;</span></div>
+<div class="code-line" id="line-34"><span class="line-num">34</span><span class="code-text">        }</span></div>
+<div class="code-line" id="line-35"><span class="line-num">35</span><span class="code-text"></span></div>
+<div class="code-line" id="line-36"><span class="line-num">36</span><span class="code-text">        <span class="type">int</span> nextRow = row, nextCol = col + 1;</span></div>
+<div class="code-line" id="line-37"><span class="line-num">37</span><span class="code-text">        <span class="kw">if</span> (col == 9) {</span></div>
+<div class="code-line" id="line-38"><span class="line-num">38</span><span class="code-text">            nextRow = row + 1;</span></div>
+<div class="code-line" id="line-39"><span class="line-num">39</span><span class="code-text">            nextCol = 0;</span></div>
+<div class="code-line" id="line-40"><span class="line-num">40</span><span class="code-text">        }</span></div>
+<div class="code-line" id="line-41"><span class="line-num">41</span><span class="code-text"></span></div>
+<div class="code-line" id="line-42"><span class="line-num">42</span><span class="code-text">        <span class="kw">if</span> (board[row][col] != '.') {</span></div>
+<div class="code-line" id="line-43"><span class="line-num">43</span><span class="code-text">            <span class="kw">return</span> <span class="func">solve</span>(board, nextRow, nextCol);</span></div>
+<div class="code-line" id="line-44"><span class="line-num">44</span><span class="code-text">        }</span></div>
+<div class="code-line" id="line-45"><span class="line-num">45</span><span class="code-text"></span></div>
+<div class="code-line" id="line-46"><span class="line-num">46</span><span class="code-text">        <span class="kw">for</span> (<span class="type">char</span> dig = <span class="str">'1'</span>; dig &lt;= <span class="str">'9'</span>; dig++) {</span></div>
+<div class="code-line" id="line-47"><span class="line-num">47</span><span class="code-text">            <span class="kw">if</span> (<span class="func">isSafe</span>(board, row, col, dig)) {</span></div>
+<div class="code-line" id="line-48"><span class="line-num">48</span><span class="code-text">                board[row][col] = dig;</span></div>
+<div class="code-line" id="line-49"><span class="line-num">49</span><span class="code-text">                <span class="kw">if</span>(<span class="func">solve</span>(board, nextRow, nextCol)){</span></div>
+<div class="code-line" id="line-50"><span class="line-num">50</span><span class="code-text">                    <span class="kw">return</span> <span class="kw">true</span>;</span></div>
+<div class="code-line" id="line-51"><span class="line-num">51</span><span class="code-text">                }</span></div>
+<div class="code-line" id="line-52"><span class="line-num">52</span><span class="code-text">                board[row][col] = '.'; <span class="comment">// backtrack</span></span></div>
+<div class="code-line" id="line-53"><span class="line-num">53</span><span class="code-text">            }</span></div>
+<div class="code-line" id="line-54"><span class="line-num">54</span><span class="code-text">        }</span></div>
+<div class="code-line" id="line-55"><span class="line-num">55</span><span class="code-text">        <span class="kw">return</span> <span class="kw">false</span>;</span></div>
+<div class="code-line" id="line-56"><span class="line-num">56</span><span class="code-text">    }</span></div>
+<div class="code-line" id="line-57"><span class="line-num">57</span><span class="code-text">};</span></div>
+        </div>
+    </div>
+
+<script>
+    const initialBoardState = [
+        ['5', '3', '.', '.', '7', '.', '.', '.', '.'],
+        ['6', '.', '.', '1', '9', '5', '.', '.', '.'],
+        ['.', '9', '8', '.', '.', '.', '.', '6', '.'],
+        ['8', '.', '.', '.', '6', '.', '.', '.', '3'],
+        ['4', '.', '.', '8', '.', '3', '.', '.', '1'],
+        ['7', '.', '.', '.', '2', '.', '.', '.', '6'],
+        ['.', '6', '.', '.', '.', '.', '2', '8', '.'],
+        ['.', '.', '.', '4', '1', '9', '.', '.', '5'],
+        ['.', '.', '.', '.', '8', '.', '.', '7', '9']
+    ];
+
+    let currentBoard = JSON.parse(JSON.stringify(initialBoardState));
+    let history = []; 
+    let currentStateIdx = -1;
+    let autoInterval = null;
+
+    const boardDiv = document.getElementById('board');
+    const statusDiv = document.getElementById('status');
+    const btnPrev = document.getElementById('btn-prev');
+    const btnNext = document.getElementById('btn-next');
+    
+    // Draw initial empty grid
+    for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            if (c === 2 || c === 5) cell.classList.add('right-thick');
+            if (r === 2 || r === 5) cell.classList.add('bottom-thick');
+            cell.id = `cell-${r}-${c}`;
+            if(initialBoardState[r][c] !== '.') {
+                cell.textContent = initialBoardState[r][c];
+                cell.classList.add('initial');
+            }
+            boardDiv.appendChild(cell);
+        }
+    }
+
+    // Generator Engine
+    function* runSudoku(board, row, col) {
+        let baseVars = { row, col, dig: '-', j: '-', i: '-', stRow: '-', stCol: '-', sr: '-', sc: '-' };
+        
+        yield { line: 31, msg: `Calling solve(board, ${row}, ${col})`, vars: { ...baseVars }, h: [] };
+        
+        yield { line: 32, msg: `Checking if row == 9`, vars: { ...baseVars }, h: [] };
+        if (row === 9) {
+            yield { line: 33, msg: `Board Solved! returning true;`, vars: { ...baseVars }, h: [] };
+            return true;
+        }
+
+        let nextRow = row, nextCol = col + 1;
+        yield { line: 36, msg: `Setting nextRow=${nextRow}, nextCol=${nextCol}`, vars: { ...baseVars }, h: [] };
+        
+        yield { line: 37, msg: `Checking if col == 9`, vars: { ...baseVars }, h: [] };
+        if (col === 9) {
+            nextRow = row + 1; nextCol = 0;
+            yield { line: 38, msg: `Adjusting nextRow=${nextRow}, nextCol=${nextCol}`, vars: { ...baseVars }, h: [] };
+        }
+
+        yield { line: 42, msg: `Checking if current cell is already filled`, vars: { ...baseVars }, h: [{r: row, c: col, type: 'active'}] };
+        if (board[row][col] !== '.') {
+            yield { line: 43, msg: `Cell filled with '${board[row][col]}', moving to next`, vars: { ...baseVars }, h: [{r: row, c: col, type: 'success'}] };
+            return yield* runSudoku(board, nextRow, nextCol);
+        }
+
+        for (let d = 1; d <= 9; d++) {
+            let dig = d.toString();
+            baseVars.dig = dig;
+            yield { line: 46, msg: `Trying digit '${dig}' at (${row}, ${col})`, vars: { ...baseVars }, h: [{r: row, c: col, type: 'active'}] };
+            
+            yield { line: 47, msg: `Calling isSafe(board, ${row}, ${col}, '${dig}')`, vars: { ...baseVars }, h: [{r: row, c: col, type: 'active'}] };
+            let safe = true;
+            
+            // Horizontal
+            for (let j = 0; j < 9; j++) {
+                let cellVal = board[row][j];
+                yield { line: 5, msg: `Horizontal check: board[${row}][${j}] is '${cellVal}'. Is '${cellVal}' == '${dig}'?`, vars: { ...baseVars, j }, h: [{r: row, c: col, type: 'active'}, {r: row, c: j, type: 'checking'}] };
+                if (board[row][j] === dig) {
+                    yield { line: 7, msg: `Conflict! '${dig}' already exists horizontally.`, vars: { ...baseVars, j }, h: [{r: row, c: col, type: 'active'}, {r: row, c: j, type: 'danger'}] };
+                    safe = false; break;
+                }
+            }
+
+            // Vertical
+            if (safe) {
+                for (let i = 0; i < 9; i++) {
+                    let cellVal = board[i][col];
+                    yield { line: 12, msg: `Vertical check: board[${i}][${col}] is '${cellVal}'. Is '${cellVal}' == '${dig}'?`, vars: { ...baseVars, i }, h: [{r: row, c: col, type: 'active'}, {r: i, c: col, type: 'checking'}] };
+                    if (board[i][col] === dig) {
+                        yield { line: 14, msg: `Conflict! '${dig}' already exists vertically.`, vars: { ...baseVars, i }, h: [{r: row, c: col, type: 'active'}, {r: i, c: col, type: 'danger'}] };
+                        safe = false; break;
+                    }
+                }
+            }
+
+            // 3x3 Grid
+            if (safe) {
+                let stRow = Math.floor(row / 3) * 3;
+                let stCol = Math.floor(col / 3) * 3;
+                yield { line: 18, msg: `Calculated Grid Start: stRow=${stRow}, stCol=${stCol}`, vars: { ...baseVars, stRow, stCol }, h: [{r: row, c: col, type: 'active'}] };
+                
+                gridLoop: for (let sr = stRow; sr <= stRow + 2; sr++) {
+                    for (let sc = stCol; sc <= stCol + 2; sc++) {
+                        let cellVal = board[sr][sc];
+                        yield { line: 22, msg: `Grid check: board[${sr}][${sc}] is '${cellVal}'. Is '${cellVal}' == '${dig}'?`, vars: { ...baseVars, stRow, stCol, sr, sc }, h: [{r: row, c: col, type: 'active'}, {r: sr, c: sc, type: 'checking'}] };
+                        if (board[sr][sc] === dig) {
+                            yield { line: 24, msg: `Conflict! '${dig}' already exists in 3x3 grid.`, vars: { ...baseVars, stRow, stCol, sr, sc }, h: [{r: row, c: col, type: 'active'}, {r: sr, c: sc, type: 'danger'}] };
+                            safe = false; break gridLoop;
+                        }
+                    }
+                }
+            }
+            
+            if (safe) {
+                yield { line: 28, msg: `isSafe returned true`, vars: { ...baseVars }, h: [{r: row, c: col, type: 'success'}] };
+                board[row][col] = dig;
+                yield { line: 48, msg: `Placed '${dig}' at (${row}, ${col})`, vars: { ...baseVars }, h: [{r: row, c: col, type: 'success'}] };
+                
+                let res = yield* runSudoku(board, nextRow, nextCol);
+                if (res) return true;
+                
+                board[row][col] = '.';
+                yield { line: 52, msg: `BACKTRACK: Reverting (${row}, ${col}) to '.'`, vars: { ...baseVars }, h: [{r: row, c: col, type: 'backtrack'}] };
+            }
+        }
+        
+        baseVars.dig = '-';
+        yield { line: 55, msg: `All digits 1-9 exhausted. Returning false (triggering previous backtrack).`, vars: { ...baseVars }, h: [{r: row, c: col, type: 'danger'}] };
+        return false;
+    }
+
+    const generator = runSudoku(JSON.parse(JSON.stringify(initialBoardState)), 0, 0);
+
+    function updateUI(state) {
+        document.getElementById('var-row').textContent = state.vars.row;
+        document.getElementById('var-col').textContent = state.vars.col;
+        document.getElementById('var-dig').textContent = state.vars.dig;
+        document.getElementById('var-j').textContent = state.vars.j;
+        document.getElementById('var-i').textContent = state.vars.i;
+        document.getElementById('var-strow').textContent = state.vars.stRow;
+        document.getElementById('var-stcol').textContent = state.vars.stCol;
+        document.getElementById('var-sr').textContent = state.vars.sr;
+        document.getElementById('var-sc').textContent = state.vars.sc;
+
+        document.querySelectorAll('.cell').forEach(c => {
+            c.classList.remove('active', 'checking', 'danger', 'backtrack', 'success');
+            if(!c.classList.contains('initial')) c.textContent = ''; 
+        });
+
+        for(let r=0; r<9; r++) {
+            for(let c=0; c<9; c++) {
+                if(state.board[r][c] !== '.') {
+                    document.getElementById(`cell-${r}-${c}`).textContent = state.board[r][c];
+                }
+            }
+        }
+
+        state.h.forEach(hl => {
+            const el = document.getElementById(`cell-${hl.r}-${hl.c}`);
+            if(el) el.classList.add(hl.type);
+        });
+
+        statusDiv.textContent = state.msg;
+        document.querySelectorAll('.code-line').forEach(l => l.classList.remove('active-line'));
+        const activeLine = document.getElementById(`line-${state.line}`);
+        if(activeLine) {
+            activeLine.classList.add('active-line');
+            activeLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        
+        btnPrev.disabled = currentStateIdx <= 0;
+    }
+
+    function stepForward() {
+        if (currentStateIdx === history.length - 1) {
+            const next = generator.next();
+            if(next.done) {
+                statusDiv.textContent = "Execution Finished!";
+                return;
+            }
+            next.value.board = JSON.parse(JSON.stringify(currentBoard));
+            
+            if (next.value.line === 48) currentBoard[next.value.vars.row][next.value.vars.col] = next.value.vars.dig;
+            if (next.value.line === 52) currentBoard[next.value.vars.row][next.value.vars.col] = '.';
+
+            next.value.board = JSON.parse(JSON.stringify(currentBoard));
+            history.push(next.value);
+        }
+        currentStateIdx++;
+        updateUI(history[currentStateIdx]);
+    }
+
+    function stepBack() {
+        if(currentStateIdx > 0) {
+            currentStateIdx--;
+            currentBoard = JSON.parse(JSON.stringify(history[currentStateIdx].board));
+            updateUI(history[currentStateIdx]);
+        }
+    }
+
+    function toggleAuto() {
+        const btn = document.getElementById('btn-auto');
+        if(autoInterval) {
+            clearInterval(autoInterval);
+            autoInterval = null;
+            btn.textContent = "Auto Run";
+            btn.style.background = "#007acc";
+        } else {
+            autoInterval = setInterval(stepForward, 200);
+            btn.textContent = "Pause Run";
+            btn.style.background = "#f44336";
+        }
+    }
+
+    stepForward();
+</script>
+</body>
+</html>

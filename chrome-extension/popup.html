@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>DevPortfolio LeetCode Sync</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+  <div class="container" id="main-container">
+    <div id="status-container" class="loading">
+      <div class="spinner"></div>
+      <p>Loading...</p>
+    </div>
+
+    <!-- Connected State (Dashboard) -->
+    <div id="dashboard-view" style="display: none;">
+      <div class="header">
+        <div class="streak-banner">
+          <span class="flame-icon">🔥</span>
+          <div>
+            <h1 id="streak-count">0 day streak!</h1>
+            <p class="subtitle">This is just the beginning for something great!</p>
+          </div>
+        </div>
+        <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙️</button>
+      </div>
+
+      <div class="weekly-tracker" id="weekly-tracker">
+        <!-- JS will populate the days -->
+      </div>
+
+      <div class="stats-section">
+        <div class="donut-container" id="donut-container">
+          <svg class="donut-svg" viewBox="0 0 100 100" id="donut-svg"
+            style="width: 100%; height: 100%; transform: rotate(-90deg);">
+            <!-- Slices populated via JS -->
+          </svg>
+          <div class="donut-hole">
+            <span class="donut-label" id="donut-label">Total</span>
+            <strong class="donut-total" id="donut-total">0</strong>
+          </div>
+          <div class="donut-tooltip" id="donut-tooltip">
+            <span class="tooltip-dot" id="tooltip-dot"></span>
+            <span id="tooltip-name"></span>
+            <span class="tooltip-count" id="tooltip-count"></span>
+          </div>
+        </div>
+
+        <div class="difficulty-breakdown">
+          <div class="diff-item easy">
+            <span class="diff-dot"></span>
+            <div class="diff-text">
+              <span class="diff-label">Easy</span>
+              <strong class="diff-count" id="count-easy">0</strong>
+            </div>
+          </div>
+          <div class="diff-item medium">
+            <span class="diff-dot"></span>
+            <div class="diff-text">
+              <span class="diff-label">Medium</span>
+              <strong class="diff-count" id="count-medium">0</strong>
+            </div>
+          </div>
+          <div class="diff-item hard">
+            <span class="diff-dot"></span>
+            <div class="diff-text">
+              <span class="diff-label">Hard</span>
+              <strong class="diff-count" id="count-hard">0</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        Having Issues? <a href="#" id="report-bug">Report Bug</a> | Made with <span class="heart">♥</span> for
+        DevPortfolio
+      </div>
+    </div>
+
+    <!-- Settings State -->
+    <div id="settings-view" style="display: none;">
+      <div class="settings-header">
+        <button id="back-btn" class="icon-btn" aria-label="Back">←</button>
+        <h2>Settings</h2>
+      </div>
+      <div class="settings-content">
+        <div class="account-card">
+          <div class="account-info">
+            <div class="account-avatar">💻</div>
+            <div class="account-meta">
+              <h3>LeetCode Linked</h3>
+              <span class="status-pill"><span class="dot"></span>Connected</span>
+              <p id="lc-username">username</p>
+            </div>
+          </div>
+          <button id="disconnect-btn" class="danger-btn">Delink Account</button>
+        </div>
+
+        <div class="category-legends-card">
+          <h3>Problem Categories</h3>
+          <div id="category-legends-container" class="legends-grid">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Missing LeetCode State -->
+    <div id="missing-lc-state" style="display: none;" class="action-state">
+      <div class="icon-container">⚠️</div>
+      <h3>Not Connected</h3>
+      <p>You are not logged into LeetCode.</p>
+      <a href="https://leetcode.com/accounts/login/" target="_blank" class="primary-btn">Log in to LeetCode</a>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+
+</html>

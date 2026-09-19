@@ -1,0 +1,75 @@
+// ─────────────────────────────────────────────────────────────
+// Prisma schema — DSA Battle Platform (Separate DB)
+// DB: PostgreSQL | ORM: Prisma
+// ─────────────────────────────────────────────────────────────
+
+generator battleClient {
+  provider = "prisma-client-js"
+  output   = "../src/generated/battle-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("BATTLE_DATABASE_URL")
+}
+
+// ── Battle Problem Pool ────────────────────────────────────────
+// These are the ~1,500 competitive coding problems used in battles.
+// Completely separate from the DSA showcase/portfolio problems.
+model BattleProblem {
+  id            String     @id @default(uuid())
+  title         String
+  slug          String     @unique
+  difficulty    String     // EASY | MEDIUM | HARD
+  statement     String     @db.Text
+  constraints   String?    @db.Text
+  inputFormat   String?    @db.Text
+  outputFormat  String?    @db.Text
+
+  // Function-based execution metadata
+  functionName  String     // e.g. "twoSum"
+  returnType    String     // e.g. "vector<int>"
+  paramTypes    String[]   @default([]) // e.g. ["vector<int>", "int"]
+  paramNames    String[]   @default([]) // e.g. ["nums", "target"]
+
+  // Starter code template
+  starterCode   String     @db.Text
+  language      String     @default("cpp")
+
+  // Categorization
+  tags          String[]   @default([])
+  category      String?    // e.g. "Array", "Linked List", "Tree"
+
+  testCases     BattleTestCase[]
+
+  isPublished   Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([difficulty])
+  @@index([category])
+}
+
+// ── Test Cases ─────────────────────────────────────────────────
+// 12 test cases per problem: 2 public + 10 hidden
+model BattleTestCase {
+  id            String   @id @default(uuid())
+  problemId     String
+
+  problem       BattleProblem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  // Structured I/O
+  input         Json     // e.g. {"nums": [2,7,11,15], "target": 9}
+  expected      Json     // e.g. [0,1]
+
+  // Visibility
+  isPublic      Boolean  @default(false)
+  order         Int
+
+  // Per-test-case limits
+  timeLimitMs   Int      @default(2000)
+  memoryLimitMb Int      @default(256)
+
+  @@index([problemId])
+  @@index([problemId, isPublic])
+}

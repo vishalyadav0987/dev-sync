@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #09090b;
+    --foreground: #fafafa;
+    --muted: #27272a;
+    --muted-foreground: #a1a1aa;
+    --border: #27272a;
+    --card: #09090b;
+    --card-foreground: #fafafa;
+  }
+}
+
+body {
+  @apply bg-slate-950 text-slate-100;
+}
+
+/* Hide scrollbars globally but keep functionality */
+*::-webkit-scrollbar {
+  display: none;
+}
+
+* {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+/* react-split gutter styles */
+.gutter.gutter-horizontal {
+  cursor: col-resize;
+  background-color: transparent;
+  transition: background-color 0.2s ease;
+  border-radius: 9999px;
+}
+.gutter.gutter-horizontal:hover, .gutter.gutter-horizontal:active {
+  background-color: rgba(255, 255, 255, 0.15);
+}

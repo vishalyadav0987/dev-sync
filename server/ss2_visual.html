@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Unique Subsets (Subsets II) Analyzer</title>
+<style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1e1e1e; color: #d4d4d4; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    
+    /* Top Input Bar */
+    #input-bar { background: #252526; padding: 10px 20px; display: flex; gap: 15px; border-bottom: 1px solid #333; align-items: center; justify-content: center; z-index: 11; }
+    #input-bar label { font-weight: bold; color: #fff; }
+    #input-bar input { background: #3c3c3c; color: #fff; border: 1px solid #555; padding: 6px 10px; border-radius: 4px; font-family: monospace; font-size: 15px; }
+    #input-arr { width: 300px; }
+    #btn-load { padding: 6px 15px; font-size: 14px; cursor: pointer; background: #4caf50; color: white; border: none; border-radius: 4px; font-weight: bold; }
+    #btn-load:hover { background: #388e3c; }
+
+    /* Live Variables Dashboard */
+    #dashboard { background: #2d2d30; padding: 15px 20px; display: flex; flex-wrap: wrap; gap: 15px; border-bottom: 2px solid #007acc; font-family: monospace; font-size: 15px; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 10; }
+    .var-box { background: #1e1e1e; border: 1px solid #555; padding: 4px 12px; border-radius: 4px; display: flex; gap: 8px; min-width: 60px; justify-content: space-between; align-items: center; }
+    .var-name { color: #569cd6; font-weight: bold; }
+    .var-val { color: #b5cea8; }
+
+    /* Main Layout */
+    #main-container { display: flex; flex: 1; overflow: hidden; }
+    
+    /* Left Panel: Visualization & Controls */
+    #left-panel { flex: 1; padding: 20px; display: flex; flex-direction: column; align-items: center; border-right: 1px solid #333; overflow-y: auto; position: relative; }
+    
+    .section-title { margin-bottom: 10px; margin-top: 10px; color: #9cdcfe; font-weight: bold; font-family: monospace; font-size: 16px; width: 100%; text-align: center; }
+    
+    /* Array Visualization */
+    #array-container { display: flex; gap: 5px; margin-bottom: 20px; flex-wrap: wrap; justify-content: center; min-height: 70px; }
+    .arr-cell-wrapper { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+    .arr-cell { width: 45px; height: 45px; display: flex; justify-content: center; align-items: center; font-size: 18px; font-weight: bold; background: #252526; border: 2px solid #555; color: #fff; border-radius: 4px; transition: all 0.2s; position: relative; }
+    .arr-idx { font-size: 12px; color: #888; font-family: monospace; text-align: center; line-height: 1.2; }
+    
+    /* Current ans Visualization */
+    #ans-container { display: flex; gap: 5px; margin-bottom: 20px; flex-wrap: wrap; justify-content: center; min-height: 45px; background: #1e1e1e; padding: 10px; border: 1px dashed #555; border-radius: 4px; min-width: 200px; }
+    .ans-cell { width: 35px; height: 35px; display: flex; justify-content: center; align-items: center; font-size: 16px; font-weight: bold; background: #007acc; border: 1px solid #005f9e; color: #fff; border-radius: 4px; }
+    
+    /* allSubsets Visualization */
+    #all-subsets-container { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; align-content: flex-start; background: #1e1e1e; border: 2px solid #555; border-radius: 6px; padding: 15px; width: 90%; min-height: 150px; margin-bottom: 20px; }
+    .subset-box { background: #252526; border: 1px solid #4caf50; border-radius: 4px; padding: 5px 10px; font-family: monospace; font-size: 15px; color: #b5cea8; display: flex; align-items: center; justify-content: center; min-width: 30px; }
+
+    /* Highlights */
+    .highlight-active { background: #ffeb3b !important; border-color: #fbc02d !important; color: black; transform: scale(1.1); box-shadow: 0 0 10px rgba(255, 235, 59, 0.5); z-index: 2; }
+    .highlight-idx { background: #007acc !important; border-color: #005f9e !important; color: white; box-shadow: 0 0 10px rgba(0, 122, 204, 0.5); }
+    .highlight-out-of-bounds { background: #f44336 !important; border-color: #d32f2f !important; opacity: 0.7; }
+
+    .controls { display: flex; gap: 10px; margin-bottom: 15px; }
+    button { padding: 8px 16px; font-size: 14px; cursor: pointer; background: #007acc; color: white; border: none; border-radius: 4px; font-weight: bold; transition: background 0.2s; }
+    button:hover { background: #005f9e; }
+    button:disabled { background: #555; cursor: not-allowed; }
+    
+    #status { margin-top: 10px; font-size: 15px; min-height: 40px; text-align: center; color: #ce9178; font-family: monospace; background: #252526; padding: 10px; border-radius: 5px; width: 90%; }
+
+    /* Right Panel: Code */
+    #right-panel { flex: 1; background: #1e1e1e; padding: 20px; overflow-y: auto; font-family: Consolas, 'Courier New', monospace; font-size: 14px; line-height: 1.5; white-space: pre; position: relative; }
+    .code-line { display: flex; padding: 2px 0; border-radius: 3px; transition: background 0.1s; }
+    .line-num { color: #858585; width: 35px; text-align: right; margin-right: 15px; user-select: none; }
+    .code-text { color: #d4d4d4; }
+    .code-line.active-line { background: #264f78; border-left: 4px solid #569cd6; }
+    
+    /* Syntax highlighting */
+    .kw { color: #569cd6; }
+    .type { color: #4ec9b0; }
+    .func { color: #dcdcaa; }
+    .str { color: #ce9178; }
+    .comment { color: #6a9955; }
+</style>
+</head>
+<body>
+
+    <div id="input-bar">
+        <label for="input-arr">Array (nums):</label>
+        <input type="text" id="input-arr" value="1, 2, 2, 3">
+        <button id="btn-load" onclick="initAnalyzer()">Load & Restart</button>
+    </div>
+
+    <div id="dashboard">
+        <div class="var-box"><span class="var-name">i</span><span class="var-val" id="var-i">-</span></div>
+        <div class="var-box"><span class="var-name">idx</span><span class="var-val" id="var-idx">-</span></div>
+        <div class="var-box"><span class="var-name">nums[i]</span><span class="var-val" id="var-num">-</span></div>
+        <div class="var-box"><span class="var-name">nums.size()</span><span class="var-val" id="var-size">-</span></div>
+        <div class="var-box"><span class="var-name">ans</span><span class="var-val" id="var-ans">[]</span></div>
+    </div>
+
+    <div id="main-container">
+        <div id="left-panel">
+            <div class="section-title">vector&lt;int&gt; nums (Sorted)</div>
+            <div id="array-container"></div>
+            
+            <div class="section-title">vector&lt;int&gt; ans</div>
+            <div id="ans-container"></div>
+
+            <div class="section-title">vector&lt;vector&lt;int&gt;&gt; allSubsets</div>
+            <div id="all-subsets-container"></div>
+
+            <div class="controls">
+                <button id="btn-prev" onclick="stepBack()" disabled>◄ Previous Step</button>
+                <button id="btn-next" onclick="stepForward()">Next Step ►</button>
+                <button id="btn-auto" onclick="toggleAuto()">Auto Run</button>
+            </div>
+            <div id="status">Click "Load & Restart" or "Next Step" to begin.</div>
+        </div>
+
+        <div id="right-panel">
+<div class="code-line" id="line-1"><span class="line-num">1</span><span class="code-text"><span class="kw">class</span> <span class="type">Solution</span> {</span></div>
+<div class="code-line" id="line-2"><span class="line-num">2</span><span class="code-text"><span class="kw">public</span>:</span></div>
+<div class="code-line" id="line-3"><span class="line-num">3</span><span class="code-text">    <span class="type">void</span> <span class="func">getUniqueSubsets</span>(<span class="type">vector</span>&lt;<span class="type">int</span>&gt;& nums, <span class="type">vector</span>&lt;<span class="type">int</span>&gt;& ans, <span class="type">int</span> i, <span class="type">vector</span>&lt;<span class="type">vector</span>&lt;<span class="type">int</span>&gt;&gt;& allSubsets){</span></div>
+<div class="code-line" id="line-4"><span class="line-num">4</span><span class="code-text">        <span class="kw">if</span>(i==nums.size()){</span></div>
+<div class="code-line" id="line-5"><span class="line-num">5</span><span class="code-text">            allSubsets.push_back(ans);</span></div>
+<div class="code-line" id="line-6"><span class="line-num">6</span><span class="code-text">            <span class="kw">return</span>;</span></div>
+<div class="code-line" id="line-7"><span class="line-num">7</span><span class="code-text">        }</span></div>
+<div class="code-line" id="line-8"><span class="line-num">8</span><span class="code-text"></span></div>
+<div class="code-line" id="line-9"><span class="line-num">9</span><span class="code-text">        <span class="comment">// include the element</span></span></div>
+<div class="code-line" id="line-10"><span class="line-num">10</span><span class="code-text">        ans.push_back(nums[i]);</span></div>
+<div class="code-line" id="line-11"><span class="line-num">11</span><span class="code-text">        <span class="func">getUniqueSubsets</span>(nums,ans,i+1,allSubsets);</span></div>
+<div class="code-line" id="line-12"><span class="line-num">12</span><span class="code-text"></span></div>
+<div class="code-line" id="line-13"><span class="line-num">13</span><span class="code-text">        <span class="comment">// exclude case - remove element</span></span></div>
+<div class="code-line" id="line-14"><span class="line-num">14</span><span class="code-text">        ans.pop_back();</span></div>
+<div class="code-line" id="line-15"><span class="line-num">15</span><span class="code-text"></span></div>
+<div class="code-line" id="line-16"><span class="line-num">16</span><span class="code-text">        <span class="comment">// Special case - sorted array</span></span></div>
+<div class="code-line" id="line-17"><span class="line-num">17</span><span class="code-text">        <span class="comment">// [1,2,2,3]</span></span></div>
+<div class="code-line" id="line-18"><span class="line-num">18</span><span class="code-text">        <span class="comment">// when i=1, when pop the element in exclude case then in i=2 we again include same</span></span></div>
+<div class="code-line" id="line-19"><span class="line-num">19</span><span class="code-text">        <span class="comment">// element is 2</span></span></div>
+<div class="code-line" id="line-20"><span class="line-num">20</span><span class="code-text">        <span class="type">int</span> idx = i+1;</span></div>
+<div class="code-line" id="line-21"><span class="line-num">21</span><span class="code-text">        <span class="kw">while</span>(idx &lt; nums.size() && nums[idx-1] == nums[idx]) idx++;</span></div>
+<div class="code-line" id="line-22"><span class="line-num">22</span><span class="code-text">        <span class="func">getUniqueSubsets</span>(nums,ans,idx++,allSubsets);</span></div>
+<div class="code-line" id="line-23"><span class="line-num">23</span><span class="code-text">    }</span></div>
+<div class="code-line" id="line-24"><span class="line-num">24</span><span class="code-text">    <span class="type">vector</span>&lt;<span class="type">vector</span>&lt;<span class="type">int</span>&gt;&gt; <span class="func">subsetsWithDup</span>(<span class="type">vector</span>&lt;<span class="type">int</span>&gt;& nums) {</span></div>
+<div class="code-line" id="line-25"><span class="line-num">25</span><span class="code-text">        <span class="func">sort</span>(nums.begin(),nums.end());</span></div>
+<div class="code-line" id="line-26"><span class="line-num">26</span><span class="code-text">        <span class="type">vector</span>&lt;<span class="type">int</span>&gt; ans;</span></div>
+<div class="code-line" id="line-27"><span class="line-num">27</span><span class="code-text">        <span class="type">vector</span>&lt;<span class="type">vector</span>&lt;<span class="type">int</span>&gt;&gt; allSubsets;</span></div>
+<div class="code-line" id="line-28"><span class="line-num">28</span><span class="code-text">        <span class="func">getUniqueSubsets</span>(nums,ans,0,allSubsets);</span></div>
+<div class="code-line" id="line-29"><span class="line-num">29</span><span class="code-text">        <span class="kw">return</span> allSubsets;</span></div>
+<div class="code-line" id="line-30"><span class="line-num">30</span><span class="code-text">    }</span></div>
+<div class="code-line" id="line-31"><span class="line-num">31</span><span class="code-text">};</span></div>
+        </div>
+    </div>
+
+<script>
+    let originalNums = [];
+    let nums = [];
+    let allSubsetsGlobal = [];
+    let history = []; 
+    let currentStateIdx = -1;
+    let autoInterval = null;
+    let generator = null;
+
+    const arrContainer = document.getElementById('array-container');
+    const ansContainer = document.getElementById('ans-container');
+    const allSubsetsContainer = document.getElementById('all-subsets-container');
+    const statusDiv = document.getElementById('status');
+    const btnPrev = document.getElementById('btn-prev');
+    const btnNext = document.getElementById('btn-next');
+    
+    function parseInput() {
+        const arrInput = document.getElementById('input-arr').value;
+        originalNums = arrInput.split(',')
+            .map(s => s.trim())
+            .filter(s => s !== '')
+            .map(Number)
+            .filter(n => !isNaN(n));
+            
+        if(originalNums.length === 0) originalNums = [1, 2, 2, 3]; // fallback
+        nums = [...originalNums]; // copy for sorting
+    }
+
+    function renderInitialState() {
+        arrContainer.innerHTML = '';
+        nums.forEach((num, index) => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'arr-cell-wrapper';
+            
+            const cell = document.createElement('div');
+            cell.className = 'arr-cell';
+            cell.id = `arr-cell-${index}`;
+            cell.textContent = num;
+            
+            const label = document.createElement('div');
+            label.className = 'arr-idx';
+            label.id = `arr-label-${index}`;
+            label.innerHTML = `&nbsp;`; 
+            
+            wrapper.appendChild(cell);
+            wrapper.appendChild(label);
+            arrContainer.appendChild(wrapper);
+        });
+        
+        // Setup Out of Bounds Cell
+        const oobWrapper = document.createElement('div');
+        oobWrapper.className = 'arr-cell-wrapper';
+        const oobCell = document.createElement('div');
+        oobCell.className = 'arr-cell';
+        oobCell.id = `arr-cell-${nums.length}`;
+        oobCell.textContent = '∅'; 
+        oobCell.style.borderStyle = 'dashed';
+        oobCell.style.borderColor = '#d32f2f';
+        const oobLabel = document.createElement('div');
+        oobLabel.className = 'arr-idx';
+        oobLabel.id = `arr-label-${nums.length}`;
+        oobLabel.innerHTML = `&nbsp;`;
+        
+        oobWrapper.appendChild(oobCell);
+        oobWrapper.appendChild(oobLabel);
+        arrContainer.appendChild(oobWrapper);
+
+        ansContainer.innerHTML = '<span style="color:#666;">empty</span>';
+        allSubsetsContainer.innerHTML = '';
+    }
+
+    // JS Generator simulating Backtracking
+    function* runSubsetAlgo(ans, i) {
+        let baseVars = { i: i, idx: '-', size: nums.length, num: i < nums.length ? nums[i] : 'OOB' };
+        
+        yield { line: 3, msg: `Entering getUniqueSubsets(i=${i})`, vars: { ...baseVars, ans: [...ans] }, all: [...allSubsetsGlobal], ptrI: i, ptrIdx: -1 };
+
+        yield { line: 4, msg: `Checking Base Case: i (${i}) == nums.size() (${nums.length})?`, vars: { ...baseVars, ans: [...ans] }, all: [...allSubsetsGlobal], ptrI: i, ptrIdx: -1 };
+        
+        if (i === nums.length) {
+            allSubsetsGlobal.push([...ans]);
+            yield { line: 5, msg: `Base Case HIT! Pushing current ans [${ans}] to allSubsets.`, vars: { ...baseVars, ans: [...ans] }, all: [...allSubsetsGlobal], ptrI: i, ptrIdx: -1, success: true };
+            yield { line: 6, msg: `Returning...`, vars: { ...baseVars, ans: [...ans] }, all: [...allSubsetsGlobal], ptrI: i, ptrIdx: -1 };
+            return;
+        }
+
+        // Include Branch
+        yield { line: 10, msg: `INCLUDE: Pushing nums[${i}] (${nums[i]}) into ans.`, vars: { ...baseVars, ans: [...ans] }, all: [...allSubsetsGlobal], ptrI: i, ptrIdx: -1 };
+        ans.push(nums[i]);
+        
+        yield { line: 11, msg: `Calling getUniqueSubsets for INCLUDE branch with i = ${i+1}.`, vars: { ...baseVars, ans: [...ans] }, all: [...allSubsetsGlobal], ptrI: i, ptrIdx: -1 };
+        yield* runSubsetAlgo(ans, i + 1);
+
+        // Exclude / Backtrack Branch
+        yield { line: 14, msg: `BACKTRACK: Popping back the last element (${ans[ans.length-1]}) from ans.`, vars: { ...baseVars, ans: [...ans] }, all: [...allSubsetsGlobal], ptrI: i, ptrIdx: -1 };
+        ans.pop();
+        
+        let idx = i + 1;
+        baseVars.idx = idx;
+        yield { line: 20, msg: `EXCLUDE: Initializing idx = i+1 = ${idx} to skip duplicates.`, vars: { ...baseVars, ans: [...ans] }, all: [...allSubsetsGlobal], ptrI: i, ptrIdx: idx };
+        
+        while (true) {
+            yield { line: 21, msg: `While check: idx < size (${idx} < ${nums.length}) && nums[${idx-1}] == nums[${idx}]`, vars: { ...baseVars, ans: [...ans] }, all: [...allSubsetsGlobal], ptrI: i, ptrIdx: idx };
+            if (idx < nums.length && nums[idx-1] === nums[idx]) {
+                idx++;
+                baseVars.idx = idx;
+                yield { line: 21, msg: `Duplicate found! Incrementing idx to ${idx}.`, vars: { ...baseVars, ans: [...ans] }, all: [...allSubsetsGlobal], ptrI: i, ptrIdx: idx };
+            } else {
+                break;
+            }
+        }
+        
+        let passedIdx = idx++; // Simulating user's exact `idx++` pass-by-value behavior
+        
+        yield { line: 22, msg: `Skipping complete. Calling getUniqueSubsets with passed idx = ${passedIdx}.`, vars: { ...baseVars, idx: passedIdx, ans: [...ans] }, all: [...allSubsetsGlobal], ptrI: i, ptrIdx: passedIdx };
+        yield* runSubsetAlgo(ans, passedIdx);
+        
+        yield { line: 23, msg: `Finished branches for i=${i}. Returning upwards.`, vars: { ...baseVars, ans: [...ans] }, all: [...allSubsetsGlobal], ptrI: i, ptrIdx: -1 };
+    }
+
+    function* mainRun() {
+        allSubsetsGlobal = [];
+        yield { line: 24, msg: `Starting subsetsWithDup...`, vars: {i: '-', idx: '-', num: '-', size: originalNums.length, ans: []}, all: [], ptrI: -1, ptrIdx: -1 };
+        
+        yield { line: 25, msg: `Sorting nums array: [${originalNums}] -> [${nums}].`, vars: {i: '-', idx: '-', num: '-', size: nums.length, ans: []}, all: [], ptrI: -1, ptrIdx: -1 };
+        
+        yield { line: 28, msg: `Calling getUniqueSubsets(nums, ans, i=0, allSubsets)`, vars: {i: 0, idx: '-', num: nums[0], size: nums.length, ans: []}, all: [], ptrI: 0, ptrIdx: -1 };
+        
+        yield* runSubsetAlgo([], 0);
+        
+        yield { line: 29, msg: `Algorithm complete. Returning allSubsets.`, vars: {i: '-', idx: '-', num: '-', size: nums.length, ans: []}, all: [...allSubsetsGlobal], ptrI: -1, ptrIdx: -1, success: true };
+    }
+
+    function updateUI(state) {
+        // Variables Dashboard
+        document.getElementById('var-i').textContent = state.vars.i;
+        document.getElementById('var-idx').textContent = state.vars.idx;
+        document.getElementById('var-size').textContent = state.vars.size;
+        document.getElementById('var-num').textContent = state.vars.num;
+        document.getElementById('var-ans').textContent = `[${state.vars.ans.join(', ')}]`;
+
+        // Update Array Highlight & Labels
+        document.querySelectorAll('.arr-cell').forEach(c => c.classList.remove('highlight-active', 'highlight-idx', 'highlight-out-of-bounds'));
+        document.querySelectorAll('.arr-idx').forEach(l => l.innerHTML = '&nbsp;');
+        
+        if (state.ptrI !== -1 && state.ptrI <= nums.length) {
+            const el = document.getElementById(`arr-cell-${state.ptrI}`);
+            const lbl = document.getElementById(`arr-label-${state.ptrI}`);
+            if (el) {
+                if(state.ptrI === nums.length) el.classList.add('highlight-out-of-bounds');
+                else el.classList.add('highlight-active');
+            }
+            if (lbl) lbl.innerHTML = 'i';
+        }
+
+        if (state.ptrIdx !== -1 && state.ptrIdx <= nums.length) {
+            const elIdx = document.getElementById(`arr-cell-${state.ptrIdx}`);
+            const lblIdx = document.getElementById(`arr-label-${state.ptrIdx}`);
+            if (elIdx && state.ptrIdx !== state.ptrI) {
+                if(state.ptrIdx === nums.length) elIdx.classList.add('highlight-out-of-bounds');
+                else elIdx.classList.add('highlight-idx');
+                if (lblIdx) lblIdx.innerHTML = 'idx';
+            } else if (lblIdx && state.ptrIdx === state.ptrI) {
+                lblIdx.innerHTML = 'i, idx';
+            }
+        }
+
+        // Update `ans` Container
+        ansContainer.innerHTML = '';
+        if (state.vars.ans.length === 0) {
+            ansContainer.innerHTML = '<span style="color:#666; font-style:italic;">[ Empty ]</span>';
+        } else {
+            state.vars.ans.forEach(val => {
+                const cell = document.createElement('div');
+                cell.className = 'ans-cell';
+                cell.textContent = val;
+                ansContainer.appendChild(cell);
+            });
+        }
+
+        // Update `allSubsets` Container
+        allSubsetsContainer.innerHTML = '';
+        if (state.all.length === 0) {
+            allSubsetsContainer.innerHTML = '<span style="color:#666; font-style:italic; padding-top:10px;">[ No subsets added yet ]</span>';
+        } else {
+            state.all.forEach(subset => {
+                const box = document.createElement('div');
+                box.className = 'subset-box';
+                box.textContent = `[${subset.join(', ')}]`;
+                allSubsetsContainer.appendChild(box);
+            });
+        }
+
+        // Status & Code Highlight
+        statusDiv.textContent = state.msg;
+        if(state.success) statusDiv.style.color = '#4caf50';
+        else statusDiv.style.color = '#ce9178';
+
+        document.querySelectorAll('.code-line').forEach(l => l.classList.remove('active-line'));
+        const activeLine = document.getElementById(`line-${state.line}`);
+        if(activeLine) {
+            activeLine.classList.add('active-line');
+            activeLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        
+        btnPrev.disabled = currentStateIdx <= 0;
+    }
+
+    function stepForward() {
+        if (currentStateIdx === history.length - 1) {
+            const next = generator.next();
+            if(next.done) {
+                statusDiv.textContent = "Execution Finished!";
+                return;
+            }
+            history.push(next.value);
+        }
+        currentStateIdx++;
+        updateUI(history[currentStateIdx]);
+    }
+
+    function stepBack() {
+        if(currentStateIdx > 0) {
+            currentStateIdx--;
+            updateUI(history[currentStateIdx]);
+        }
+    }
+
+    function toggleAuto() {
+        const btn = document.getElementById('btn-auto');
+        if(autoInterval) {
+            clearInterval(autoInterval);
+            autoInterval = null;
+            btn.textContent = "Auto Run";
+            btn.style.background = "#007acc";
+        } else {
+            autoInterval = setInterval(stepForward, 800);
+            btn.textContent = "Pause Run";
+            btn.style.background = "#f44336";
+        }
+    }
+
+    function initAnalyzer() {
+        if(autoInterval) toggleAuto();
+        parseInput();
+        nums.sort((a, b) => a - b); // Apply sort before rendering
+        renderInitialState();
+        history = [];
+        currentStateIdx = -1;
+        generator = mainRun();
+        stepForward();
+    }
+
+    // Boot
+    initAnalyzer();
+
+</script>
+</body>
+</html>

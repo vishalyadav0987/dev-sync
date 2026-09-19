@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>N-Queens Execution Trace Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --board-border: #334155;
+            --cell-light: #e2e8f0;
+            --cell-dark: #94a3b8;
+
+            --color-target: #facc15; /* Yellow */
+            --color-danger: #ef4444; /* Red */
+            --color-safe: #22c55e;   /* Green */
+            --color-backtrack: #3b82f6; /* Blue */
+        }
+
+        html, body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 16px;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        /* Layout */
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+            height: 100%;
+        }
+
+        @media (min-width: 900px) {
+            .app-container {
+                flex-direction: row;
+                align-items: stretch;
+                height: calc(100vh - 32px);
+            }
+        }
+
+        .panel {
+            background-color: var(--panel-bg);
+            border-radius: 12px;
+            border: 1px solid var(--board-border);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+
+        .left-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .right-panel {
+            flex: 1;
+            overflow: hidden; /* Contains the scrolling code */
+            min-height: 260px;
+        }
+
+        /* Chessboard */
+        #board-wrapper {
+            background-color: var(--board-border);
+            padding: 8px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        #board {
+            display: grid;
+            gap: 0;
+            border: 2px solid var(--board-border);
+        }
+
+        .cell {
+            width: clamp(36px, 8vw, 64px);
+            height: clamp(36px, 8vw, 64px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: clamp(22px, 5vw, 36px);
+            font-weight: bold;
+            color: #0f172a;
+            transition: background-color 0.3s ease, transform 0.1s;
+        }
+
+        .cell.light { background-color: var(--cell-light); }
+        .cell.dark { background-color: var(--cell-dark); }
+
+        /* Highlight States */
+        .cell.target { background-color: var(--color-target) !important; box-shadow: inset 0 0 15px rgba(0,0,0,0.4); }
+        .cell.danger { background-color: var(--color-danger) !important; color: white; animation: pulse 0.4s; }
+        .cell.safe { background-color: var(--color-safe) !important; color: white; }
+        .cell.backtrack { background-color: var(--color-backtrack) !important; color: white; }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(0.9); }
+            100% { transform: scale(1); }
+        }
+
+        /* Status */
+        #status-panel {
+            width: 100%;
+            background: #0f172a;
+            padding: 14px 18px;
+            border-radius: 8px;
+            border-left: 5px solid var(--color-target);
+            min-height: 70px;
+            display: flex;
+            align-items: center;
+            font-size: 1rem;
+            transition: border-left-color 0.3s;
+        }
+
+        /* Code Viewer */
+        .code-container {
+            background-color: #0f172a;
+            border-radius: 8px;
+            overflow-y: auto;
+            flex-grow: 1;
+            padding: 14px 0;
+            font-family: 'Fira Code', 'Courier New', Courier, monospace;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .code-line {
+            padding: 2px 18px;
+            display: flex;
+            border-left: 4px solid transparent;
+            color: #e2e8f0;
+            transition: background-color 0.2s, border-left-color 0.2s;
+        }
+
+        .code-line .line-num {
+            color: #64748b;
+            min-width: 28px;
+            margin-right: 14px;
+            text-align: right;
+            user-select: none;
+        }
+
+        .code-line.active-target { background-color: rgba(250, 204, 21, 0.15); border-left-color: var(--color-target); }
+        .code-line.active-danger { background-color: rgba(239, 68, 68, 0.15); border-left-color: var(--color-danger); }
+        .code-line.active-safe { background-color: rgba(34, 197, 94, 0.15); border-left-color: var(--color-safe); }
+        .code-line.active-backtrack { background-color: rgba(59, 130, 246, 0.15); border-left-color: var(--color-backtrack); }
+
+        .kwd { color: #c678dd; }
+        .typ { color: #e5c07b; }
+        .fnc { color: #61afef; }
+        .str { color: #98c379; }
+        .cmt { color: #7f848e; font-style: italic; }
+        .op { color: #56b6c2; }
+        .num { color: #d19a66; }
+
+        /* Loading veil shown until the parent's first SEEK arrives */
+        #boot-veil {
+            position: fixed;
+            inset: 0;
+            background: var(--bg-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+            transition: opacity 0.25s ease;
+        }
+        #boot-veil.hidden { opacity: 0; pointer-events: none; }
+    </style>
+</head>
+<body>
+
+    <div id="boot-veil"><span style="color:#94a3b8;font-size:14px;">Preparing trace…</span></div>
+
+    <div class="max-w-7xl mx-auto mb-5">
+        <h1 class="text-2xl font-bold text-white mb-1">N-Queens Full Execution Trace</h1>
+        <p class="text-slate-400 text-sm">Step-synced C++ backtracking trace — driven by the player controls above.</p>
+    </div>
+
+    <div class="max-w-7xl mx-auto mb-5 bg-slate-800 p-4 rounded-lg border border-slate-700 flex flex-col sm:flex-row gap-4 items-center justify-between shadow-lg">
+        <div class="text-slate-300 font-semibold flex items-center gap-2 text-sm">
+            <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path></svg>
+            Live Scope Variables:
+        </div>
+        <div class="flex flex-wrap gap-3">
+            <div class="bg-slate-900 border border-slate-600 px-3 py-1.5 rounded flex items-center gap-2 min-w-[80px] justify-between">
+                <span class="text-indigo-400 font-mono text-sm">n</span><span class="text-slate-500">=</span>
+                <span id="var-n" class="text-white font-mono font-bold">-</span>
+            </div>
+            <div class="bg-slate-900 border border-slate-600 px-3 py-1.5 rounded flex items-center gap-2 min-w-[80px] justify-between">
+                <span class="text-emerald-400 font-mono text-sm">row</span><span class="text-slate-500">=</span>
+                <span id="var-row" class="text-white font-mono font-bold">-</span>
+            </div>
+            <div class="bg-slate-900 border border-slate-600 px-3 py-1.5 rounded flex items-center gap-2 min-w-[80px] justify-between">
+                <span class="text-amber-400 font-mono text-sm">j</span><span class="text-slate-500">=</span>
+                <span id="var-j" class="text-white font-mono font-bold">-</span>
+            </div>
+            <div class="bg-slate-900 border border-slate-600 px-3 py-1.5 rounded flex items-center gap-2 min-w-[80px] justify-between">
+                <span class="text-rose-400 font-mono text-sm">col</span><span class="text-slate-500">=</span>
+                <span id="var-col" class="text-white font-mono font-bold">-</span>
+            </div>
+            <div class="bg-slate-900 border border-slate-600 px-3 py-1.5 rounded flex items-center gap-2 min-w-[80px] justify-between">
+                <span class="text-sky-400 font-mono text-sm">i</span><span class="text-slate-500">=</span>
+                <span id="var-i" class="text-white font-mono font-bold">-</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <div class="panel left-panel">
+            <div id="board-wrapper"><div id="board"></div></div>
+            <div id="status-panel"><div id="status-msg">Initializing simulation…</div></div>
+        </div>
+
+        <div class="panel right-panel flex-col">
+            <h2 class="text-lg font-bold mb-3 text-white flex items-center justify-between border-b border-slate-700 pb-2">
+                <span>C++ Backtracking Code</span>
+                <span class="text-xs font-normal text-slate-400 bg-slate-800 px-2 py-1 rounded">Synced with execution</span>
+            </h2>
+            <div id="code-container" class="code-container shadow-inner"></div>
+        </div>
+    </div>
+
+    <script>
+        // ── C++ source (rendered with simple inline syntax spans) ─────────
+        const cppCodeLines = [
+            `<span class="typ">bool</span> <span class="fnc">isSafe</span>(<span class="typ">vector</span>&lt;<span class="typ">string</span>&gt; &board, <span class="typ">int</span> row, <span class="typ">int</span> col, <span class="typ">int</span> n) {`,
+            `    <span class="cmt">// vertical check</span>`,
+            `    <span class="kwd">for</span>(<span class="typ">int</span> i=<span class="num">0</span>; i&lt;row; i++) {`,
+            `        <span class="kwd">if</span>(board[i][col] <span class="op">==</span> <span class="str">'Q'</span>) <span class="kwd">return false</span>;`,
+            `    }`,
+            `    <span class="cmt">// left diagonal</span>`,
+            `    <span class="kwd">for</span>(<span class="typ">int</span> i=row-<span class="num">1</span>, j=col-<span class="num">1</span>; i&gt;=<span class="num">0</span> <span class="op">&&</span> j&gt;=<span class="num">0</span>; i--, j--) {`,
+            `        <span class="kwd">if</span>(board[i][j] <span class="op">==</span> <span class="str">'Q'</span>) <span class="kwd">return false</span>;`,
+            `    }`,
+            `    <span class="cmt">// right diagonal</span>`,
+            `    <span class="kwd">for</span>(<span class="typ">int</span> i=row-<span class="num">1</span>, j=col+<span class="num">1</span>; i&gt;=<span class="num">0</span> <span class="op">&&</span> j&lt;n; i--, j++) {`,
+            `        <span class="kwd">if</span>(board[i][j] <span class="op">==</span> <span class="str">'Q'</span>) <span class="kwd">return false</span>;`,
+            `    }`,
+            `    <span class="kwd">return true</span>;`,
+            `}`,
+            ``,
+            `<span class="typ">void</span> <span class="fnc">nQueens</span>(<span class="typ">vector</span>&lt;<span class="typ">string</span>&gt; &board, <span class="typ">int</span> row, <span class="typ">int</span> n, <span class="typ">vector</span>&lt;<span class="typ">vector</span>&lt;<span class="typ">string</span>&gt;&gt; &ans) {`,
+            `    <span class="kwd">if</span>(row <span class="op">==</span> n) {`,
+            `        ans.push_back(board);`,
+            `        <span class="kwd">return</span>;`,
+            `    }`,
+            `    <span class="kwd">for</span>(<span class="typ">int</span> j=<span class="num">0</span>; j&lt;n; j++) {`,
+            `        <span class="kwd">if</span>(<span class="fnc">isSafe</span>(board, row, j, n)) {`,
+            `            board[row][j] <span class="op">=</span> <span class="str">'Q'</span>;`,
+            `            <span class="fnc">nQueens</span>(board, row+<span class="num">1</span>, n, ans);`,
+            `            board[row][j] <span class="op">=</span> <span class="str">'.'</span>; <span class="cmt">// Backtrack</span>`,
+            `        }`,
+            `    }`,
+            `}`
+        ];
+
+        function initCodeContainer() {
+            const container = document.getElementById('code-container');
+            const frag = document.createDocumentFragment();
+            cppCodeLines.forEach((line, index) => {
+                const lineNum = index + 1;
+                const div = document.createElement('div');
+                div.id = `line-${lineNum}`;
+                div.className = 'code-line';
+                div.innerHTML = `<span class="line-num">${lineNum}</span><span class="code-content">${line}</span>`;
+                frag.appendChild(div);
+            });
+            container.appendChild(frag);
+        }
+
+        // ── Simulation: pre-compute the full execution trace once ─────────
+        const N = 4;
+        let simBoard = Array.from({ length: N }, () => Array(N).fill('.'));
+        const history = [];
+
+        function recordState(line, msg, highlights = [], type = 'target', vars = {}) {
+            history.push({
+                board: simBoard.map((r) => r.slice()),
+                line, msg, highlights, type,
+                vars: {
+                    n: N,
+                    row: vars.row !== undefined ? vars.row : '-',
+                    j: vars.j !== undefined ? vars.j : '-',
+                    col: vars.col !== undefined ? vars.col : '-',
+                    i: vars.i !== undefined ? vars.i : '-',
+                },
+            });
+        }
+
+        function simulateNQueens(row) {
+            recordState(18, `Checking base case: row == n (${row} == ${N})`, [], 'target', { row });
+            if (row === N) {
+                recordState(19, `<strong>Solution Found!</strong> Saving board to ans.`, [], 'safe', { row });
+                recordState(20, `Returning from solution.`, [], 'safe', { row });
+                return;
+            }
+
+            recordState(22, `Entering loop for columns j in row ${row}.`, [], 'target', { row });
+
+            for (let j = 0; j < N; j++) {
+                recordState(23, `Calling <code>isSafe(board, ${row}, ${j}, ${N})</code>`, [{ r: row, c: j, type: 'target' }], 'target', { row, j });
+
+                let safe = true;
+                const col = j;
+
+                recordState(3, `Inside <code>isSafe</code>: checking vertical column ${col}.`, [{ r: row, c: j, type: 'target' }], 'target', { row, col });
+                for (let i = 0; i < row; i++) {
+                    if (simBoard[i][col] === 'Q') {
+                        safe = false;
+                        recordState(4, `<strong>Conflict!</strong> Vertical clash at (${i}, ${col}). Returns false.`, [
+                            { r: row, c: j, type: 'target' }, { r: i, c: col, type: 'danger' },
+                        ], 'danger', { row, col, i });
+                        break;
+                    }
+                }
+
+                if (safe) {
+                    recordState(7, `Inside <code>isSafe</code>: checking left diagonal.`, [{ r: row, c: j, type: 'target' }], 'target', { row, col });
+                    for (let i = row - 1, c = col - 1; i >= 0 && c >= 0; i--, c--) {
+                        if (simBoard[i][c] === 'Q') {
+                            safe = false;
+                            recordState(8, `<strong>Conflict!</strong> Left diagonal clash at (${i}, ${c}). Returns false.`, [
+                                { r: row, c: j, type: 'target' }, { r: i, c, type: 'danger' },
+                            ], 'danger', { row, col, i });
+                            break;
+                        }
+                    }
+                }
+
+                if (safe) {
+                    recordState(11, `Inside <code>isSafe</code>: checking right diagonal.`, [{ r: row, c: j, type: 'target' }], 'target', { row, col });
+                    for (let i = row - 1, c = col + 1; i >= 0 && c < N; i--, c++) {
+                        if (simBoard[i][c] === 'Q') {
+                            safe = false;
+                            recordState(12, `<strong>Conflict!</strong> Right diagonal clash at (${i}, ${c}). Returns false.`, [
+                                { r: row, c: j, type: 'target' }, { r: i, c, type: 'danger' },
+                            ], 'danger', { row, col, i });
+                            break;
+                        }
+                    }
+                }
+
+                if (!safe) continue;
+
+                recordState(14, `<code>isSafe</code> returns <strong>true</strong>. Space is clear.`, [{ r: row, c: j, type: 'safe' }], 'safe', { row, col });
+
+                simBoard[row][j] = 'Q';
+                recordState(24, `Placing Queen at (${row}, ${j}).`, [{ r: row, c: j, type: 'safe' }], 'safe', { row, j });
+
+                recordState(25, `Recursive call for next row: <code>nQueens(board, ${row + 1}, ${N}, ans)</code>`, [], 'target', { row, j });
+                simulateNQueens(row + 1);
+
+                recordState(26, `<strong>Backtracking!</strong> Removing Queen from (${row}, ${j}).`, [{ r: row, c: j, type: 'backtrack' }], 'backtrack', { row, j });
+                simBoard[row][j] = '.';
+            }
+        }
+
+        // ── Rendering ───────────────────────────────────────────────────
+        let currentIndex = 0;
+
+        function renderBoard(state) {
+            const boardDiv = document.getElementById('board');
+            boardDiv.style.gridTemplateColumns = `repeat(${N}, 1fr)`;
+            boardDiv.innerHTML = '';
+            const frag = document.createDocumentFragment();
+            for (let r = 0; r < N; r++) {
+                for (let c = 0; c < N; c++) {
+                    const cell = document.createElement('div');
+                    const isDark = (r + c) % 2 === 1;
+                    cell.className = `cell ${isDark ? 'dark' : 'light'}`;
+                    if (state.board[r][c] === 'Q') cell.textContent = '♛';
+                    const highlight = state.highlights.find((h) => h.r === r && h.c === c);
+                    if (highlight) cell.classList.add(highlight.type);
+                    frag.appendChild(cell);
+                }
+            }
+            boardDiv.appendChild(frag);
+        }
+
+        function updateUI(index) {
+            if (index < 0 || index >= history.length) return;
+            currentIndex = index;
+            const state = history[index];
+
+            renderBoard(state);
+
+            const statusMsg = document.getElementById('status-msg');
+            const statusPanel = document.getElementById('status-panel');
+            statusMsg.innerHTML = state.msg;
+
+            const colorMap = { target: 'var(--color-target)', danger: 'var(--color-danger)', safe: 'var(--color-safe)', backtrack: 'var(--color-backtrack)' };
+            statusPanel.style.borderLeftColor = colorMap[state.type] || colorMap.target;
+
+            document.querySelectorAll('.code-line.active-target, .code-line.active-danger, .code-line.active-safe, .code-line.active-backtrack')
+                .forEach((el) => el.classList.remove('active-target', 'active-danger', 'active-safe', 'active-backtrack'));
+
+            const activeLineEl = document.getElementById(`line-${state.line}`);
+            if (activeLineEl) {
+                activeLineEl.classList.add(`active-${state.type}`);
+                activeLineEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+
+            document.getElementById('var-n').textContent = state.vars.n;
+            document.getElementById('var-row').textContent = state.vars.row;
+            document.getElementById('var-j').textContent = state.vars.j;
+            document.getElementById('var-col').textContent = state.vars.col;
+            document.getElementById('var-i').textContent = state.vars.i;
+        }
+
+        // ── Host bridge: this visualization has no controls of its own.
+        // It is fully driven by the parent app's PlayerControls via
+        // postMessage, matching the VisualizationIframe protocol. ─────────
+        let autoplayTimer = null;
+
+        function notifyStepChanged(step) {
+            window.parent.postMessage({ type: 'STEP_CHANGED', step }, '*');
+        }
+
+        function stopAutoplay() {
+            if (autoplayTimer) {
+                clearInterval(autoplayTimer);
+                autoplayTimer = null;
+            }
+        }
+
+        function startAutoplay() {
+            stopAutoplay();
+            autoplayTimer = setInterval(() => {
+                if (currentIndex >= history.length - 1) {
+                    stopAutoplay();
+                    return;
+                }
+                updateUI(currentIndex + 1);
+                notifyStepChanged(currentIndex);
+            }, 700);
+        }
+
+        function announceReady() {
+            window.parent.postMessage({ type: 'VISUALIZATION_READY', totalSteps: history.length }, '*');
+        }
+
+        window.addEventListener('message', (e) => {
+            const data = e.data;
+            if (!data || !data.type) return;
+
+            switch (data.type) {
+                case 'SEEK': {
+                    const clamped = Math.max(0, Math.min(history.length - 1, data.step ?? 0));
+                    updateUI(clamped);
+                    document.getElementById('boot-veil')?.classList.add('hidden');
+                    break;
+                }
+                case 'PLAY':
+                    startAutoplay();
+                    break;
+                case 'PAUSE':
+                    stopAutoplay();
+                    break;
+                case 'REQUEST_STATE':
+                    announceReady();
+                    updateUI(currentIndex);
+                    break;
+                default:
+                    break;
+            }
+        });
+
+        window.onload = function () {
+            initCodeContainer();
+
+            recordState(17, `Initial Call: <code>nQueens(board, row=0, n=4, ans)</code>`, [], 'target', { row: 0 });
+            simulateNQueens(0);
+            recordState(29, `<strong>Execution Complete.</strong> All possibilities explored.`, [], 'safe', { row: '-' });
+
+            updateUI(0);
+            announceReady();
+        };
+    </script>
+</body>
+</html>

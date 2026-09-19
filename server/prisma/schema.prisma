@@ -1,0 +1,446 @@
+// ─────────────────────────────────────────────────────────────
+// Prisma schema — DSA Portfolio Platform
+// DB: PostgreSQL | ORM: Prisma
+// ─────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Folder Tree (self-referencing) ─────────────────────────────
+// Arrays > Sliding Window, DP > 1D DP > Knapsack, etc.
+model Category {
+  id        String     @id @default(uuid())
+  name      String
+  slug      String     @unique
+  parentId  String?
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Category[] @relation("CategoryTree")
+  order     Int        @default(0)
+  problems  Problem[]
+  createdAt DateTime   @default(now())
+
+  @@index([parentId])
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+// ── DSA Problem + C++ solution + analysis ─────────────────────
+model Problem {
+  id              String     @id @default(uuid())
+  title           String
+  slug            String     @unique
+  statement       String     @db.Text
+  difficulty      Difficulty @default(MEDIUM)
+  tags            String[]   @default([])
+
+  // Code
+  cppCode         String     @db.Text
+  language        String     @default("cpp")
+
+  // Analyzer payload (structured, rendered as visual "Analyzer" card)
+  timeComplexity  String?
+  spaceComplexity String?
+  edgeCases       String[]   @default([])
+  approachNotes   String?    @db.Text
+  visualHtml      String?    @db.Text   // sanitized HTML/SVG snippet for logic visualization
+  
+  // LeetCode Sync Data
+  leetcodeId      Int?       @unique
+  leetcodeUrl     String?
+  testCases       Json?      // Store raw inputs/outputs or test case arrays
+
+  categoryId      String
+  category        Category   @relation(fields: [categoryId], references: [id])
+
+  approaches      ProblemApproach[]
+
+  copyCount       Int        @default(0)
+  vizViewCount    Int        @default(0)
+  
+  // Success tracking
+  totalAttempts   Int        @default(0)
+  totalSolved     Int        @default(0)
+
+  isPublished     Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  notes           Note[]
+  sessionEntries  SessionProblem[]
+  mistakeReviews  MistakeReview[]
+
+  @@index([categoryId])
+  @@index([difficulty])
+}
+
+model ProblemApproach {
+  id              String   @id @default(uuid())
+  problemId       String
+  problem         Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  title           String
+  
+  cppCode         String   @db.Text
+  timeComplexity  String?
+  spaceComplexity String?
+  approachNotes   String?  @db.Text
+  visualHtml      String?  @db.Text
+  
+  order           Int      @default(0)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([problemId])
+}
+
+// ── Anonymous guest identity (UUID minted client-side, stored in localStorage) ─
+model GuestSession {
+  id           String    @id @default(uuid()) // == the UUID stored in localStorage
+  displayName  String    @default("Anonymous")
+  createdAt    DateTime  @default(now())
+  lastSeenAt   DateTime  @default(now())
+
+  // Streaks
+  currentStreak  Int       @default(0)
+  longestStreak  Int       @default(0)
+  lastActiveDate String?   // YYYY-MM-DD
+  leetcodeSession String?  // LEETCODE_SESSION cookie for syncing (legacy cron)
+  leetcodeUsername String? @unique // Pure LeetCode auth username
+  leetcodeSyncStatus String @default("DISCONNECTED") // CONNECTED, SYNCING, EXPIRED
+  leetcodeLastSync   DateTime?
+  leetcodeSyncError  String?  @db.Text
+
+  // Chrome Extension connection
+  extensionToken       String?   @unique  // one-time pairing token
+  extensionTokenExpiry DateTime?           // token expires after 10 min
+  extensionConnected   Boolean   @default(false)
+
+  blogs        Blog[]
+  blogLikes    BlogLike[]
+  comments     Comment[]
+  sessions     StudySession[]
+  notes        Note[]
+  savedBlogs   SavedBlog[]
+  visualizationHistory VisualizationHistory[]
+  stepBookmarks        StepBookmark[]
+  mistakeReviews       MistakeReview[]
+  dailyActivities      DailyActivity[]
+  wonBattles           BattleResult[]
+  extensionSubmissions ExtensionSubmission[]
+}
+
+// ── Extension-submitted LeetCode submissions (real-time sync) ───
+model ExtensionSubmission {
+  id                    String       @id @default(uuid())
+  guestId               String
+  guest                 GuestSession @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  leetcodeSubmissionId  String       // LeetCode's own submission ID
+  problemSlug           String
+  problemTitle          String
+  language              String
+  code                  String       @db.Text
+  status                String       @default("RECEIVED") // RECEIVED | PROCESSED | FAILED
+  processedAt           DateTime?
+  createdAt             DateTime     @default(now())
+
+  @@unique([guestId, leetcodeSubmissionId])
+  @@index([guestId])
+  @@index([status])
+}
+
+// ── Blogging ────────────────────────────────────────────────────
+model Blog {
+  id          String    @id @default(uuid())
+  title       String
+  slug        String    @unique
+  contentMd   String    @db.Text   // markdown source
+  authorId    String
+  author      GuestSession @relation(fields: [authorId], references: [id])
+  published   Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  comments    Comment[]
+  likes       BlogLike[]
+  savedBy     SavedBlog[]
+
+  @@index([authorId])
+}
+
+model BlogLike {
+  id        String       @id @default(uuid())
+  blogId    String
+  blog      Blog         @relation(fields: [blogId], references: [id], onDelete: Cascade)
+  guestId   String
+  guest     GuestSession @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+
+  @@unique([blogId, guestId])
+  @@index([blogId])
+  @@index([guestId])
+}
+
+model Comment {
+  id        String    @id @default(uuid())
+  blogId    String
+  blog      Blog      @relation(fields: [blogId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    GuestSession @relation(fields: [authorId], references: [id])
+  body      String    @db.Text
+  createdAt DateTime  @default(now())
+
+  @@index([blogId])
+}
+
+// ── Personal DSA study workspace ───────────────────────────────
+model StudySession {
+  id                  String   @id @default(uuid())
+  title               String
+  description         String?
+  category            String?  // freeform topic e.g. "Backtracking"
+  goalLabel           String?  // e.g. "Solve 5 Backtracking Problems"
+  targetProblems      Int?
+  targetMinutes       Int?
+  difficulty          String   @default("MIXED") // EASY | MEDIUM | HARD | MIXED
+  focusMode           Boolean  @default(false)
+  status              String   @default("ACTIVE") // ACTIVE | COMPLETED | ARCHIVED
+  isFavorite          Boolean  @default(false)
+  totalFocusedSeconds Int      @default(0)
+  startedAt           DateTime @default(now())
+  completedAt         DateTime?
+
+  // Workspace / command-center fields
+  currentProblemId    String?  // the problem the learner is actively solving right now
+  reflection          String?  @db.Text // "what did you learn" captured on completion
+  confidence          Int?     // 1-5 self-rating captured on completion
+
+  guestId   String
+  guest     GuestSession @relation(fields: [guestId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  notes     Note[]
+  problems  SessionProblem[]
+  mistakes  MistakeReview[]
+  activity  SessionActivity[]
+
+  @@index([guestId])
+  @@index([guestId, status])
+}
+
+// Problems queued/attached to a study session (the "session problem queue")
+model SessionProblem {
+  id          String   @id @default(uuid())
+  sessionId   String
+  session     StudySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  problemId   String
+  problem     Problem  @relation(fields: [problemId], references: [id])
+  order       Int      @default(0)
+  status      String   @default("NOT_STARTED") // NOT_STARTED | IN_PROGRESS | SOLVED | FAILED | SKIPPED | REVISIT
+  stage       String   @default("understanding") // understanding | approach | implementation | testing | solved
+  startedAt   DateTime?
+  completedAt DateTime?
+  timeSpent   Int      @default(0) // seconds
+  attempts    Int      @default(0)
+  hintsUsed   Int      @default(0)
+  confidence  Int?     // 1-5, set when marked solved
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([sessionId, problemId])
+  @@index([sessionId])
+  @@index([problemId])
+}
+
+// A structured "what went wrong" card generated from a failed/skipped problem.
+model MistakeReview {
+  id              String   @id @default(uuid())
+  sessionId       String
+  session         StudySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  problemId       String
+  problem         Problem  @relation(fields: [problemId], references: [id])
+  guestId         String
+  guest           GuestSession @relation(fields: [guestId], references: [id])
+
+  mistake         String   @db.Text // what went wrong
+  reason          String?  @db.Text // why it happened
+  correctConcept  String?  @db.Text // the concept to remember
+  confidence      Int?     // 1-5 after review
+  isReviewed      Boolean  @default(false)
+  reviewedAt      DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([sessionId])
+  @@index([guestId])
+  @@index([guestId, isReviewed])
+}
+
+// Lightweight append-only timeline used to render the session timeline and
+// to derive cross-session insights (streaks, weak topics, etc).
+model SessionActivity {
+  id        String   @id @default(uuid())
+  sessionId String
+  session   StudySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  guestId   String
+  type      String   // SESSION_STARTED | SESSION_PAUSED | SESSION_RESUMED | PROBLEM_STARTED |
+                      // PROBLEM_SOLVED | PROBLEM_FAILED | PROBLEM_SKIPPED | NOTE_CREATED |
+                      // MISTAKE_CREATED | SESSION_COMPLETED
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([guestId, createdAt])
+}
+
+// Notes tied to a problem AND a study session, owned by a guest
+model Note {
+  id              String        @id @default(uuid())
+  title           String?
+  content         String        @db.Text
+  
+  // Relations
+  problemId       String?
+  problem         Problem?      @relation(fields: [problemId], references: [id], onDelete: SetNull)
+  sessionId       String?
+  session         StudySession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  guestId         String
+  guest           GuestSession  @relation(fields: [guestId], references: [id])
+
+  // Visualization specific attachment points
+  visualizationId String?
+  stepId          Int?
+  codeLine        Int?
+  elementId       String?
+  
+  // Sticky note styling/positioning
+  color           String   @default("yellow")
+  positionX       Int      @default(50)
+  positionY       Int      @default(50)
+  width           Int      @default(250)
+  height          Int      @default(200)
+  isPinned        Boolean  @default(false)
+  tags            String[] @default([])
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([problemId])
+  @@index([sessionId])
+  @@index([guestId])
+  @@index([guestId, problemId])
+  @@index([guestId, stepId])
+}
+
+// Visualization History
+model VisualizationHistory {
+  id                   String       @id @default(uuid())
+  guestId              String
+  guest                GuestSession @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  problemId            String
+  lastStep             Int          @default(0)
+  totalSessions        Int          @default(1)
+  completionPercentage Float        @default(0.0)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  @@unique([guestId, problemId])
+  @@index([guestId])
+}
+
+// Step Bookmarks
+model StepBookmark {
+  id        String       @id @default(uuid())
+  guestId   String
+  guest     GuestSession @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  problemId String
+  stepId    Int
+  note      String?
+  createdAt DateTime     @default(now())
+
+  @@unique([guestId, problemId, stepId])
+  @@index([guestId, problemId])
+}
+
+model SavedBlog {
+  id        String       @id @default(uuid())
+  blogId    String
+  blog      Blog         @relation(fields: [blogId], references: [id], onDelete: Cascade)
+  guestId   String
+  guest     GuestSession @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+
+  @@unique([blogId, guestId])
+  @@index([blogId])
+  @@index([guestId])
+}
+
+// ── Daily Activity tracking for contribution graph ──────────────
+model DailyActivity {
+  id              String       @id @default(uuid())
+  guestId         String
+  guest           GuestSession @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  date            String       // Format: YYYY-MM-DD
+  problemsSolved  Int          @default(0)
+  timeSpent       Int          @default(0) // seconds
+  
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([guestId, date])
+  @@index([guestId])
+}
+
+// ── Universal Chat Reports ───────────────────────────────────────
+model ChatReport {
+  id              String       @id @default(uuid())
+  messageId       String
+  reporterId      String
+  reason          String?      @db.Text
+  status          String       @default("PENDING") // PENDING, REVIEWED, DISMISSED
+  createdAt       DateTime     @default(now())
+
+  @@index([messageId])
+  @@index([reporterId])
+}
+
+// ── Battle History ───────────────────────────────────────────────
+model BattleResult {
+  id              String        @id @default(uuid())
+
+  roomId          String        @unique
+
+  // Store battle problem IDs as array (from dsa_battle DB)
+  battleProblemIds String[]     @default([])
+
+  winnerId        String?
+  winner          GuestSession? @relation(fields: [winnerId], references: [id])
+
+  maxPlayers      Int
+  status          String        // FINISHED, EXPIRED
+
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  durationSeconds Int?
+
+  // Snapshot of participants at the time the battle ended.
+  players         Json          @default("[]")
+
+  createdAt       DateTime      @default(now())
+
+  @@index([winnerId])
+  @@index([status])
+  @@index([finishedAt])
+}
