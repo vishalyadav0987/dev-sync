@@ -222,7 +222,7 @@ vector<int> readVectorInt(istream& in) {
   char c; in.get(c); // '['
   skipWhitespace(in);
   if (in.peek() == ']') { in.get(); return v; }
-  while (true) {
+  while (in && !in.eof()) {
     v.push_back(readInt(in));
     skipWhitespace(in);
     in.get(c);
@@ -237,7 +237,7 @@ vector<long long> readVectorLongLong(istream& in) {
   char c; in.get(c);
   skipWhitespace(in);
   if (in.peek() == ']') { in.get(); return v; }
-  while (true) {
+  while (in && !in.eof()) {
     v.push_back(readLongLong(in));
     skipWhitespace(in);
     in.get(c);
@@ -252,7 +252,7 @@ vector<string> readVectorString(istream& in) {
   char c; in.get(c);
   skipWhitespace(in);
   if (in.peek() == ']') { in.get(); return v; }
-  while (true) {
+  while (in && !in.eof()) {
     v.push_back(readString(in));
     skipWhitespace(in);
     in.get(c);
@@ -267,7 +267,7 @@ vector<vector<int>> readVectorVectorInt(istream& in) {
   char c; in.get(c);
   skipWhitespace(in);
   if (in.peek() == ']') { in.get(); return v; }
-  while (true) {
+  while (in && !in.eof()) {
     v.push_back(readVectorInt(in));
     skipWhitespace(in);
     in.get(c);
@@ -338,14 +338,18 @@ int main() {
   cin.tie(nullptr);
 
   Solution solution;
-
+  
+  int __numTestCases = readInt(cin);
+  for (int __t = 0; __t < __numTestCases; __t++) {
 ${paramDeclarations}
 
-  auto result = solution.${functionName}(${paramCallArgs});
+    auto result = solution.${functionName}(${paramCallArgs});
 
-  ${outputPrinter}
+    ${outputPrinter}
 
-  cout << endl;
+    cout << "\\n";
+  }
+  
   return 0;
 }
 `;
