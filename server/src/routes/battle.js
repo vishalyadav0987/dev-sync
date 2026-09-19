@@ -146,16 +146,37 @@ router.get("/:roomId", async (req, res) => {
 // ═══════════════════════════════════════════════════════════════
 // RUN — Execute code against PUBLIC test cases only
 // ═══════════════════════════════════════════════════════════════
-router.post("/run", async (req, res) => {
+const executionLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  limit: 10, // 10 executions per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many execution requests. Please wait a moment." }
+});
+
+router.post("/run", executionLimiter, async (req, res) => {
   try {
     const { roomId, uuid, code, language, problemId } = req.body;
     if (!roomId || !uuid || !code || !language || !problemId) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
+    const validLanguages = ["javascript", "python", "cpp", "java"];
+    if (!validLanguages.includes(language)) {
+      return res.status(400).json({ error: "Unsupported language" });
+    }
+
+    if (code.length > 50000) {
+      return res.status(400).json({ error: "Code exceeds maximum allowed size (50KB)" });
+    }
+
     const room = await BattleRoomStore.getRoom(roomId);
     if (!room || room.status !== "ACTIVE") {
       return res.status(400).json({ error: "Battle is not active" });
+    }
+
+    if (!room.problemIds.includes(problemId)) {
+      return res.status(400).json({ error: "Problem does not belong to this battle room" });
     }
 
     // Update player status to RUNNING
@@ -197,16 +218,29 @@ router.post("/run", async (req, res) => {
 // ═══════════════════════════════════════════════════════════════
 // SUBMIT — Execute code against ALL test cases (public + hidden)
 // ═══════════════════════════════════════════════════════════════
-router.post("/submit", async (req, res) => {
+router.post("/submit", executionLimiter, async (req, res) => {
   try {
     const { roomId, uuid, code, language, problemId } = req.body;
     if (!roomId || !uuid || !code || !language || !problemId) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
+    const validLanguages = ["javascript", "python", "cpp", "java"];
+    if (!validLanguages.includes(language)) {
+      return res.status(400).json({ error: "Unsupported language" });
+    }
+
+    if (code.length > 50000) {
+      return res.status(400).json({ error: "Code exceeds maximum allowed size (50KB)" });
+    }
+
     const room = await BattleRoomStore.getRoom(roomId);
     if (!room || room.status !== "ACTIVE") {
       return res.status(400).json({ error: "Battle is not active" });
+    }
+
+    if (!room.problemIds.includes(problemId)) {
+      return res.status(400).json({ error: "Problem does not belong to this battle room" });
     }
 
     const players = await BattleRoomStore.getPlayers(roomId);

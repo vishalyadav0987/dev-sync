@@ -24,7 +24,7 @@ export default function BattlePage() {
   const [timeLeft, setTimeLeft] = useState(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [notifications, setNotifications] = useState([]);
-  
+
   // Execution states
   const [outputs, setOutputs] = useState({});
   const [statuses, setStatuses] = useState({});
@@ -32,7 +32,7 @@ export default function BattlePage() {
   const [activeTab, setActiveTab] = useState('testcases');
   const [activeTestCase, setActiveTestCase] = useState(0);
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
-  
+
   const addNotification = (msg) => {
     const id = Date.now() + Math.random();
     setNotifications(prev => [...prev, { id, msg }]);
@@ -40,7 +40,7 @@ export default function BattlePage() {
       setNotifications(prev => prev.filter(n => n.id !== id));
     }, 3000);
   };
-  
+
   const socketRef = useRef(null);
   const uuid = getGuestId();
 
@@ -61,21 +61,21 @@ export default function BattlePage() {
         setRoom(data.room);
         setProblems(data.problems || [data.problem].filter(Boolean));
         setPlayers(data.players);
-        
+
         if (data.rankings) {
           setResults(data.rankings);
         } else if (data.room.winnerParticipantId) {
           const w = data.players.find(p => p.participantId === data.room.winnerParticipantId);
           if (w) setWinner(w);
         }
-        
+
         // Connect Socket
         const socketUrl = ASSET_BASE_URL + '/battle';
         const socket = io(socketUrl, {
           transports: ['websocket'],
           reconnection: true
         });
-        
+
         socketRef.current = socket;
 
         socket.on("connect", () => {
@@ -105,7 +105,7 @@ export default function BattlePage() {
         socket.on("battle:player-updated", (data) => {
           setPlayers(data.players);
         });
-        
+
         socket.on("battle:countdown", (data) => {
           setRoom(prev => ({ ...prev, status: "COUNTDOWN", countdown: data.seconds }));
         });
@@ -113,7 +113,7 @@ export default function BattlePage() {
         socket.on("battle:started", (data) => {
           setRoom(data.room);
         });
-        
+
         socket.on("battle:winner", (data) => {
           // Backward compatibility / fallback
           setWinner(data.participant);
@@ -124,7 +124,7 @@ export default function BattlePage() {
           setRoom(data.room);
           setResults(data.rankings);
         });
-        
+
         socket.on("battle:expired", (data) => {
           setRoom(data.room);
         });
@@ -153,7 +153,11 @@ export default function BattlePage() {
         });
 
         socket.on("execution:completed", (data) => {
-          setStatuses(prev => ({ ...prev, [data.problemId]: data.status === 'ACCEPTED' ? 'success' : 'error' }));
+          // Keep the real verdict (ACCEPTED, WRONG_ANSWER, COMPILE_ERROR,
+          // RUNTIME_ERROR, TIME_LIMIT_EXCEEDED, SERVICE_UNAVAILABLE, ...)
+          // instead of collapsing everything down to success/error —
+          // BattleConsole renders the correct label/color per status.
+          setStatuses(prev => ({ ...prev, [data.problemId]: data.status }));
           setOutputs(prev => ({ ...prev, [data.problemId]: `Execution completed: ${data.status}\nPassed ${data.passed}/${data.total} tests.` }));
           setTestResultsMap(prev => ({
             ...prev,
@@ -201,6 +205,9 @@ export default function BattlePage() {
         if (diff <= 0) {
           setTimeLeft("00:00");
           clearInterval(interval);
+          if (socket) {
+            socket.emit("battle:time_up", { roomId: room.roomId });
+          }
         } else {
           const m = Math.floor(diff / 60000);
           const s = Math.floor((diff % 60000) / 1000);
@@ -224,7 +231,7 @@ export default function BattlePage() {
       <div className="flex-1 flex flex-col items-center justify-center h-screen bg-[#030712] text-white">
         <h2 className="text-xl font-bold text-rose-500 mb-2">Battle Error</h2>
         <p className="text-slate-400 mb-6">{error}</p>
-        <button 
+        <button
           onClick={() => navigate('/')}
           className="px-4 py-2 bg-slate-800 rounded-lg hover:bg-slate-700 transition"
         >
@@ -237,10 +244,10 @@ export default function BattlePage() {
   // Lobby Phase
   if (room.status === "WAITING" || room.status === "READY" || room.status === "COUNTDOWN") {
     return (
-      <BattleLobby 
-        room={room} 
-        problems={problems} 
-        players={players} 
+      <BattleLobby
+        room={room}
+        problems={problems}
+        players={players}
         socket={socketRef.current}
         uuid={uuid}
       />
@@ -252,7 +259,7 @@ export default function BattlePage() {
   // Active / Finished Phase
   return (
     <div className="flex-1 flex flex-col h-screen bg-[#030712] text-white">
-      
+
       {/* Global Battle Header */}
       <div className="flex items-center justify-between px-6 py-3 bg-slate-900 border-b border-slate-800 shrink-0">
         <div className="flex items-center gap-4">
@@ -262,13 +269,13 @@ export default function BattlePage() {
           <div className="px-2 py-1 bg-slate-800 rounded text-xs font-mono text-slate-400">
             Room: {room.roomId}
           </div>
-          
+
           <div className="group relative ml-2 z-50">
             <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 rounded-md cursor-pointer hover:bg-slate-700 transition">
               <Users size={16} className="text-slate-400" />
               <span className="text-sm font-bold text-slate-300">{players.length} / {room.maxPlayers} Players</span>
             </div>
-            
+
             <div className="absolute top-full left-0 mt-2 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all overflow-hidden">
               <div className="p-2">
                 {players.map(p => (
@@ -286,7 +293,7 @@ export default function BattlePage() {
             </div>
           </div>
         </div>
-        
+
         {room.status === 'ACTIVE' && timeLeft && (
           <div className="flex items-center gap-2 px-4 py-1.5 bg-slate-950 border border-slate-800 rounded-full font-mono text-lg font-bold text-slate-200">
             <Clock size={18} className="text-indigo-400" />
@@ -296,7 +303,7 @@ export default function BattlePage() {
           </div>
         )}
 
-        <button 
+        <button
           onClick={() => setShowExitConfirm(true)}
           className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-rose-400 hover:text-white hover:bg-rose-500 rounded-md transition-colors"
         >
@@ -318,11 +325,10 @@ export default function BattlePage() {
                       <button
                         key={p.id}
                         onClick={() => setActiveProblemIndex(idx)}
-                        className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-                          activeProblemIndex === idx 
-                            ? 'border-indigo-500 text-indigo-400 bg-slate-900' 
+                        className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${activeProblemIndex === idx
+                            ? 'border-indigo-500 text-indigo-400 bg-slate-900'
                             : 'border-transparent text-slate-500 hover:text-slate-300 hover:bg-slate-900/50'
-                        }`}
+                          }`}
                       >
                         P{idx + 1}: {p.title.length > 15 ? p.title.substring(0, 15) + '...' : p.title}
                       </button>
@@ -333,17 +339,16 @@ export default function BattlePage() {
                 <div className="px-5 py-4 border-b border-slate-800 shrink-0 bg-slate-900">
                   <h2 className="text-xl font-bold text-slate-100">{activeProblem?.title}</h2>
                   <div className="flex items-center gap-2 mt-2">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider ${
-                      activeProblem?.difficulty === 'EASY' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
-                      activeProblem?.difficulty === 'MEDIUM' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
-                      'bg-rose-500/10 text-rose-500 border border-rose-500/20'
-                    }`}>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider ${activeProblem?.difficulty === 'EASY' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
+                        activeProblem?.difficulty === 'MEDIUM' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
+                          'bg-rose-500/10 text-rose-500 border border-rose-500/20'
+                      }`}>
                       {activeProblem?.difficulty}
                     </span>
                     <span className="text-xs text-slate-500 font-medium bg-slate-800 px-2 py-0.5 rounded-md">Room {room.roomId}</span>
                   </div>
                 </div>
-                
+
                 <div className="flex-1 overflow-y-auto p-5 custom-scrollbar bg-slate-900/50">
                   <div className="prose prose-invert prose-sm max-w-none text-slate-300">
                     {activeProblem?.statement ? activeProblem.statement.split('\n').map((para, i) => (
@@ -361,9 +366,9 @@ export default function BattlePage() {
               {/* Right panel: Editor */}
               <Panel id="editor-panel" defaultSize={60} minSize={30} className="flex flex-col min-w-0 bg-[#0d1117] relative">
                 {activeProblem && (
-                  <BattleEditor 
-                    room={room} 
-                    problem={activeProblem} 
+                  <BattleEditor
+                    room={room}
+                    problem={activeProblem}
                     socket={socketRef.current}
                     uuid={uuid}
                     onStatusChange={(problemId, status) => setStatuses(prev => ({ ...prev, [problemId]: status }))}
@@ -388,7 +393,7 @@ export default function BattlePage() {
 
           {isConsoleOpen && (
             <Panel id="console-panel" defaultSize={30} minSize={20} className="flex flex-col bg-[#0d1117]">
-              <BattleConsole 
+              <BattleConsole
                 problem={activeProblem}
                 status={statuses[activeProblem?.id] || 'idle'}
                 output={outputs[activeProblem?.id] || ''}
@@ -406,9 +411,8 @@ export default function BattlePage() {
         <div className="shrink-0 flex items-center px-4 py-1.5 bg-slate-900 border border-slate-800 rounded-lg shadow-sm">
           <button
             onClick={() => setIsConsoleOpen(!isConsoleOpen)}
-            className={`flex items-center gap-2 px-3 py-1 text-sm font-medium rounded transition-colors ${
-              isConsoleOpen ? 'text-indigo-400 bg-indigo-500/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-            }`}
+            className={`flex items-center gap-2 px-3 py-1 text-sm font-medium rounded transition-colors ${isConsoleOpen ? 'text-indigo-400 bg-indigo-500/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              }`}
           >
             <span>Console</span>
             <span className="text-[10px] opacity-70">
@@ -427,7 +431,7 @@ export default function BattlePage() {
               <h2 className="text-3xl font-black text-white mb-2">BATTLE FINAL RESULTS</h2>
               <p className="text-slate-400">The battle has ended. Here are the final rankings.</p>
             </div>
-            
+
             {results && results.length > 0 ? (
               <div className="mb-8 border border-slate-700 rounded-xl overflow-hidden">
                 <table className="w-full text-left border-collapse">
@@ -465,13 +469,13 @@ export default function BattlePage() {
                 </table>
               </div>
             ) : (
-               <div className="text-lg text-slate-300 mb-6 text-center">
-                 Winner: <span className="font-bold text-emerald-400">{winner?.displayName}</span>
-               </div>
+              <div className="text-lg text-slate-300 mb-6 text-center">
+                Winner: <span className="font-bold text-emerald-400">{winner?.displayName}</span>
+              </div>
             )}
-            
+
             <div className="flex gap-4 justify-center">
-              <button 
+              <button
                 onClick={() => navigate('/')}
                 className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition shadow-lg shadow-blue-900/20"
               >
@@ -494,13 +498,13 @@ export default function BattlePage() {
               Are you sure you want to exit the room? You will forfeit the match if it is currently active.
             </p>
             <div className="flex justify-end gap-3">
-              <button 
+              <button
                 onClick={() => setShowExitConfirm(false)}
                 className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={() => {
                   if (socketRef.current) {
                     socketRef.current.emit("battle:quit", {}, () => {

@@ -15,6 +15,10 @@ const sampleProblems = [
     returnType: "vector<int>",
     paramTypes: ["vector<int>", "int"],
     paramNames: ["nums", "target"],
+    // Two Sum's answer can be returned in either order ([0,1] or [1,0]) —
+    // without this, a correct solution that happens to return indices in
+    // the "other" order is wrongly marked WRONG_ANSWER.
+    comparisonMode: "unordered",
     starterCode: "class Solution {\npublic:\n    vector<int> twoSum(vector<int>& nums, int target) {\n        \n    }\n};",
     language: "cpp",
     tags: ["Array", "Hash Table"],
@@ -112,13 +116,22 @@ async function seed() {
       where: { slug: p.slug }
     });
 
+    const { testCases, ...problemData } = p;
+
     if (existing) {
-      console.log(`Skipping ${p.title}, already exists.`);
+      // Re-run this script to pick up metadata fixes (e.g. comparisonMode)
+      // on problems that were already seeded — a plain "skip if exists"
+      // meant a bug fix here silently never reached an already-seeded DB.
+      // Test cases are left alone (existing submissions/results reference
+      // them by id).
+      await battlePrisma.battleProblem.update({
+        where: { slug: p.slug },
+        data: problemData
+      });
+      console.log(`Updated metadata for ${p.title} (already existed).`);
       continue;
     }
 
-    const { testCases, ...problemData } = p;
-    
     await battlePrisma.battleProblem.create({
       data: {
         ...problemData,

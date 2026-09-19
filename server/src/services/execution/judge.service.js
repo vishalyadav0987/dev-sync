@@ -56,8 +56,14 @@ export class JudgeService {
       };
     }
 
-    const sortedActual = [...actual].sort();
-    const sortedExpected = [...expected].sort();
+    // Sort function that handles numbers properly and falls back to string comparison
+    const sortFn = (a, b) => {
+      if (typeof a === 'number' && typeof b === 'number') return a - b;
+      return JSON.stringify(a).localeCompare(JSON.stringify(b));
+    };
+
+    const sortedActual = [...actual].sort(sortFn);
+    const sortedExpected = [...expected].sort(sortFn);
 
     if (JSON.stringify(sortedActual) === JSON.stringify(sortedExpected)) {
       return { passed: true };

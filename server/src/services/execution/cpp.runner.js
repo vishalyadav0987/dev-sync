@@ -151,7 +151,16 @@ export class CppRunner {
     const outputPrinter = this.generateOutputPrinter(returnType);
 
     return `
-#include <bits/stdc++.h>
+#include <iostream>
+#include <vector>
+#include <string>
+#include <map>
+#include <unordered_map>
+#include <set>
+#include <unordered_set>
+#include <algorithm>
+#include <cmath>
+#include <iomanip>
 using namespace std;
 
 // ─── Helper: JSON-like I/O ────────────────────────────────────

@@ -142,6 +142,33 @@ export function setupBattleGateway(io) {
       await handleDisconnect(socket, battleNamespace);
     });
 
+    socket.on("battle:time_up", async (payload) => {
+      try {
+        const { roomId } = payload;
+        const room = await BattleRoomStore.getRoom(roomId);
+        if (!room || room.status !== "ACTIVE" || !room.startedAt) return;
+        
+        const start = parseInt(room.startedAt, 10);
+        const durationMs = room.durationMinutes * 60 * 1000;
+        const now = Date.now();
+        
+        // Check if time is actually up (allow small grace period)
+        if (now >= start + durationMs - 5000) {
+          const rankings = await BattleService.computeRankings(roomId);
+          const winnerPid = rankings.length > 0 && rankings[0].solvedCount > 0 ? rankings[0].participantId : null;
+          await BattleService.finalizeBattle(roomId, { status: "EXPIRED", winnerParticipantId: winnerPid, rankings });
+          
+          const finalRoom = await BattleRoomStore.getRoom(roomId);
+          battleNamespace.to(`battle:${roomId}`).emit("battle:results", { 
+            room: finalRoom, 
+            rankings 
+          });
+        }
+      } catch (err) {
+        console.error("Battle time up error:", err);
+      }
+    });
+
     socket.on("battle:quit", async (payload, callback) => {
       if (socket.battleParticipant && socket.battleRoom) {
          try {

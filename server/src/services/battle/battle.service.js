@@ -149,6 +149,9 @@ export class BattleService {
         starterCode: p.starterCode,
         language: p.language,
         functionName: p.functionName,
+        returnType: p.returnType,
+        paramTypes: p.paramTypes,
+        paramNames: p.paramNames,
         tags: p.tags,
         category: p.category,
         testCases: p.testCases.map(tc => ({

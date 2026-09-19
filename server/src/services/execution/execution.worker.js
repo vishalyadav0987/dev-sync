@@ -11,8 +11,10 @@
  */
 
 import { Worker } from "bullmq";
-import { CppRunner } from "./cpp.runner.js";
+import { Judge0Runner } from "./judge0.runner.js";
+import { CppRunner } from "./cpp.runner.js"; // Kept for generating stdin/harness if needed
 import { JudgeService } from "./judge.service.js";
+import battlePrisma from "../../lib/battlePrisma.js";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 
@@ -31,16 +33,10 @@ function parseRedisUrl(url) {
 
 let ioInstance = null;
 
-/**
- * Set the Socket.IO server instance for emitting real-time events.
- */
 export function setIOInstance(io) {
   ioInstance = io;
 }
 
-/**
- * Emit an execution event to the battle room via Socket.IO.
- */
 function emitExecutionEvent(roomId, uuid, event, data) {
   if (!ioInstance) return;
   ioInstance.of("/battle").to(`battle:${roomId}`).emit(event, {
@@ -50,76 +46,60 @@ function emitExecutionEvent(roomId, uuid, event, data) {
   });
 }
 
-/**
- * Process a single execution job.
- */
 async function processJob(job) {
   const {
     jobId,
     roomId,
     uuid,
     participantId,
+    problemId,
     code,
     language,
     mode,
-    problemMeta,
     testCases
   } = job.data;
 
-  const { functionName, returnType, paramTypes, paramNames } = problemMeta;
+  // Fetch the latest problem data from the Battle DB to ensure single source of truth
+  const problem = await battlePrisma.battleProblem.findUnique({
+    where: { id: problemId }
+  });
+
+  if (!problem) throw new Error("Problem not found");
+
+  const { functionName, returnType, paramTypes, paramNames, comparisonMode } = problem;
 
   // Notify: execution started
   emitExecutionEvent(roomId, uuid, "execution:status", {
     jobId,
     problemId,
     status: "COMPILING",
-    message: "Compiling your code..."
+    message: "Preparing execution environment..."
   });
 
-  let workDir;
   try {
-    // Step 1: Create working directory
-    workDir = await CppRunner.createWorkDir();
-
-    // Step 2: Generate harness + compile
-    const fullSource = CppRunner.generateHarness(
-      code, functionName, returnType, paramTypes, paramNames
-    );
-
-    const compileResult = await CppRunner.compile(fullSource, workDir);
-
-    if (!compileResult.success) {
-      emitExecutionEvent(roomId, uuid, "execution:status", {
-        jobId,
-        problemId,
-        status: "COMPILE_ERROR",
-        message: compileResult.error
-      });
-
-      return {
-        success: false,
-        status: "COMPILE_ERROR",
-        message: compileResult.error,
-        testResults: null
-      };
+    // Generate harness based on language
+    let fullSource = code;
+    
+    // Fallback: If it's C++, we can use the CppRunner to generate the harness
+    if (language.toLowerCase() === "cpp") {
+      fullSource = CppRunner.generateHarness(code, functionName, returnType, paramTypes, paramNames);
+    } else {
+      fullSource = Judge0Runner.generateHarness(code, language, functionName, returnType, paramTypes, paramNames);
     }
 
-    // Notify: compilation successful
     emitExecutionEvent(roomId, uuid, "execution:status", {
       jobId,
       problemId,
       status: "COMPILED",
-      message: "Compilation successful. Running tests..."
+      message: "Ready. Running tests..."
     });
 
-    // Step 3: Run against each test case
     const results = [];
     let allPassed = true;
 
     for (let i = 0; i < testCases.length; i++) {
       const tc = testCases[i];
 
-      // Notify: test starting
       emitExecutionEvent(roomId, uuid, "execution:test-update", {
         jobId,
         problemId,
@@ -130,28 +110,58 @@ async function processJob(job) {
         status: "RUNNING"
       });
 
-      // Generate stdin from structured input
+      // Generate stdin using CppRunner's serializer for now
       const stdinInput = CppRunner.generateStdin(tc.input, paramNames);
 
-      // Run the executable
-      const runResult = await CppRunner.run(
-        compileResult.executablePath,
-        stdinInput,
-        tc.timeLimitMs || 2000,
-        tc.memoryLimitMb || 256
-      );
+      let runResult;
+      
+      if (language.toLowerCase() === 'cpp') {
+        const workDir = await CppRunner.createWorkDir();
+        try {
+          const compRes = await CppRunner.compile(fullSource, workDir);
+          if (!compRes.success) {
+             runResult = {
+               success: false,
+               status: "COMPILE_ERROR",
+               error: compRes.error,
+               runtimeMs: 0
+             };
+          } else {
+             runResult = await CppRunner.run(
+               compRes.executablePath, 
+               stdinInput,
+               tc.timeLimitMs || 2000,
+               tc.memoryLimitMb || 256
+             );
+          }
+        } finally {
+          await CppRunner.cleanupWorkDir(workDir);
+        }
+      } else {
+        // Run via Judge0 for other languages
+        runResult = await Judge0Runner.run(
+          fullSource,
+          language,
+          stdinInput,
+          tc.timeLimitMs || 2000,
+          tc.memoryLimitMb || 256
+        );
+      }
 
       let testStatus;
       let testMessage = null;
+      let testActual = null;
 
       if (!runResult.success) {
-        testStatus = runResult.status; // TIME_LIMIT_EXCEEDED, RUNTIME_ERROR, MEMORY_LIMIT_EXCEEDED
-        testMessage = runResult.status === "RUNTIME_ERROR" ? "Runtime Error" : runResult.status.replace(/_/g, " ");
+        testStatus = runResult.status; // COMPILE_ERROR, TIME_LIMIT_EXCEEDED, RUNTIME_ERROR, etc.
+        testMessage = runResult.error || (runResult.status === "RUNTIME_ERROR" ? "Runtime Error" : runResult.status.replace(/_/g, " "));
+        testActual = "null";
         allPassed = false;
       } else {
         // Parse output and compare
         const actualOutput = JudgeService.parseOutput(runResult.stdout);
-        const comparison = JudgeService.compare(actualOutput, tc.expected);
+        testActual = actualOutput;
+        const comparison = JudgeService.compare(actualOutput, tc.expected, comparisonMode || "exact");
 
         if (comparison.passed) {
           testStatus = "PASSED";
@@ -173,7 +183,7 @@ async function processJob(job) {
         ...(tc.isPublic ? {
           input: tc.input,
           expected: tc.expected,
-          actual: runResult.success ? JudgeService.parseOutput(runResult.stdout) : null
+          actual: testActual
         } : {})
       };
 
@@ -207,7 +217,16 @@ async function processJob(job) {
     // Final verdict
     const passedCount = results.filter(r => r.status === "PASSED").length;
     const totalCount = testCases.length;
-    const finalStatus = allPassed ? "ACCEPTED" : "WRONG_ANSWER";
+    let finalStatus = allPassed ? "ACCEPTED" : "WRONG_ANSWER";
+    if (results.some(r => r.status === "SERVICE_UNAVAILABLE")) {
+      finalStatus = "SERVICE_UNAVAILABLE";
+    } else if (results.some(r => r.status === "COMPILE_ERROR")) {
+      finalStatus = "COMPILE_ERROR";
+    } else if (results.some(r => r.status === "RUNTIME_ERROR")) {
+      finalStatus = "RUNTIME_ERROR";
+    } else if (results.some(r => r.status === "TIME_LIMIT_EXCEEDED")) {
+      finalStatus = "TIME_LIMIT_EXCEEDED";
+    }
     const maxRuntime = Math.max(...results.filter(r => r.runtimeMs).map(r => r.runtimeMs), 0);
 
     emitExecutionEvent(roomId, uuid, "execution:completed", {
@@ -231,12 +250,19 @@ async function processJob(job) {
         cases: results
       }
     };
-
-  } finally {
-    // Cleanup
-    if (workDir) {
-      await CppRunner.cleanupWorkDir(workDir);
-    }
+  } catch (err) {
+    console.error("Job processing error:", err);
+    emitExecutionEvent(roomId, uuid, "execution:status", {
+      jobId,
+      problemId,
+      status: "EXECUTION_ERROR",
+      message: err.message || "An unexpected error occurred during execution."
+    });
+    return {
+      success: false,
+      status: "ERROR",
+      message: err.message
+    };
   }
 }
 

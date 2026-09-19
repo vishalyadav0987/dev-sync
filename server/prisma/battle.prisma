@@ -31,6 +31,7 @@ model BattleProblem {
   returnType    String     // e.g. "vector<int>"
   paramTypes    String[]   @default([]) // e.g. ["vector<int>", "int"]
   paramNames    String[]   @default([]) // e.g. ["nums", "target"]
+  comparisonMode String    @default("exact") // "exact", "unordered", "numeric"
 
   // Starter code template
   starterCode   String     @db.Text

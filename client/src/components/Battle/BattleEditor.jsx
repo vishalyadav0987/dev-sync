@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { Play, Send, Loader2, XCircle } from 'lucide-react';
 import { api } from '../../lib/api';
+import { generateTemplate } from './templateGenerator';
 
 export function BattleEditor({ 
   room, 
@@ -30,16 +31,17 @@ export function BattleEditor({
 
   // Restore code from local storage on problem change
   useEffect(() => {
-    const saved = localStorage.getItem(`battle_code_${room.roomId}_${problem.id}`);
+    const saved = localStorage.getItem(`battle_code_${room.roomId}_${problem.id}_${language}`);
     if (saved) {
       setCodeMap(prev => ({ ...prev, [problem.id]: saved }));
     } else {
-      let defaultCode = '';
-      if (language === 'javascript') {
-        defaultCode = `function solve() {\n  // Write your code here\n  \n}\n\n// console.log(solve());`;
-      } else if (language === 'cpp') {
-        defaultCode = problem?.cppCode || `#include <iostream>\nusing namespace std;\n\nint main() {\n  // Write your code here\n  return 0;\n}`;
-      }
+      let defaultCode = generateTemplate(
+        language, 
+        problem?.functionName, 
+        problem?.returnType, 
+        problem?.paramTypes, 
+        problem?.paramNames
+      );
       setCodeMap(prev => ({ ...prev, [problem.id]: defaultCode }));
     }
   }, [room.roomId, problem.id, language]);
@@ -68,7 +70,7 @@ export function BattleEditor({
 
   const handleEditorChange = (value) => {
     setCodeMap(prev => ({ ...prev, [problem.id]: value }));
-    localStorage.setItem(`battle_code_${room.roomId}_${problem.id}`, value);
+    localStorage.setItem(`battle_code_${room.roomId}_${problem.id}_${language}`, value);
   };
 
   const handleRun = async () => {
