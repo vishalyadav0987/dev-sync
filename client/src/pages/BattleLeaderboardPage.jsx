@@ -139,12 +139,12 @@ export default function BattleLeaderboardPage() {
                   <div className="divide-y divide-white/5">
                     {stats.recentBattles.map((battle) => (
                       <div key={battle.id} className="p-4 hover:bg-white/5 transition-colors flex flex-col sm:flex-row gap-4 sm:items-center justify-between">
-                        <div className="space-y-1">
+                        <div className="space-y-1 min-w-0 flex-1">
                           <div className="flex items-center gap-3">
-                            <span className="font-mono text-xs px-2 py-1 bg-white/5 rounded text-gray-400 border border-white/10">
+                            <span className="font-mono text-xs px-2 py-1 bg-white/5 rounded text-gray-400 border border-white/10 shrink-0">
                               #{battle.roomId}
                             </span>
-                            <span className="text-sm text-gray-400 flex items-center gap-1">
+                            <span className="text-sm text-gray-400 flex items-center gap-1 shrink-0">
                               <Clock className="w-3.5 h-3.5" />
                               {formatDistanceToNow(new Date(battle.createdAt), { addSuffix: true })}
                             </span>
@@ -152,9 +152,9 @@ export default function BattleLeaderboardPage() {
                           
                           <div className="mt-2 flex flex-wrap gap-2">
                             {battle.problems.map(p => (
-                              <div key={p.title} className="text-sm font-medium flex items-center">
-                                {p.title}
-                                <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full border ${
+                              <div key={p.title} className="text-sm font-medium flex items-center max-w-full">
+                                <span className="truncate">{p.title}</span>
+                                <span className={`ml-2 shrink-0 text-[10px] px-1.5 py-0.5 rounded-full border ${
                                   p.difficulty === 'EASY' ? 'border-green-500/30 text-green-400 bg-green-500/10' :
                                   p.difficulty === 'MEDIUM' ? 'border-yellow-500/30 text-yellow-400 bg-yellow-500/10' :
                                   'border-red-500/30 text-red-400 bg-red-500/10'
