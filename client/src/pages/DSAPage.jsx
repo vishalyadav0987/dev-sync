@@ -232,7 +232,7 @@ export default function DSAPage({ categories: initialCategories = [] }) {
           <div className="max-w-5xl mx-auto w-full p-4 md:p-8 space-y-8 pb-32 relative z-10 animate-in fade-in slide-in-from-bottom-8 duration-700 ease-out">
 
             {/* PREMIUM STICKY HEADER */}
-            <header className="top-4 z-40 rounded-2xl border border-slate-700/50 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/50 p-5 md:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 transition-all ring-1 ring-white/5">
+            <header className="top-4 z-40 rounded-2xl border border-slate-700/50 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/50 p-5 md:px-8 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 transition-all ring-1 ring-white/5">
               <div className="flex flex-col gap-2">
                 <h2 className="text-3xl font-black text-white flex items-center gap-3 tracking-tight">
                   {activeProblem.title || activeProblem.name}
@@ -259,11 +259,11 @@ export default function DSAPage({ categories: initialCategories = [] }) {
                 </div>
               </div>
 
-              <div className="flex flex-col sm:items-end gap-2.5 w-full sm:w-auto">
-                <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="flex flex-col xl:items-end gap-2.5 w-full xl:w-auto mt-4 xl:mt-0">
+                <div className="flex items-center gap-3 w-full xl:w-auto">
                   <button
                     onClick={handleAddToSession}
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm active:scale-95 hover:border-slate-500"
+                    className="flex-1 xl:flex-none flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm active:scale-95 hover:border-slate-500"
                   >
                     <Plus className="w-4 h-4" />
                     Add to Session
@@ -272,13 +272,13 @@ export default function DSAPage({ categories: initialCategories = [] }) {
                     to={`/dsa/${activeProblem.slug}/visualize`}
                     state={{ approachIndex: activeApproachIndex }}
                     onClick={() => api.trackViz(activeProblem.slug).catch(console.error)}
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 border border-indigo-500/50 hover:-translate-y-0.5 active:translate-y-0"
+                    className="flex-1 xl:flex-none flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 border border-indigo-500/50 hover:-translate-y-0.5 active:translate-y-0"
                   >
                     <Sparkles className="w-4 h-4" />
                     Visualize Code
                   </Link>
                 </div>
-                <div className="text-[10px] text-indigo-300/80 font-medium flex items-center gap-1.5 w-full justify-center sm:justify-end pr-1">
+                <div className="text-[10px] text-indigo-300/80 font-medium flex items-center gap-1.5 w-full justify-center xl:justify-end pr-1">
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
