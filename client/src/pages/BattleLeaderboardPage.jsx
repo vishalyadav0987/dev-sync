@@ -29,7 +29,7 @@ export default function BattleLeaderboardPage() {
 
   return (
     <div className="min-h-full bg-[#030712] text-white p-6 relative overflow-y-auto">
-      <div className="absolute inset-0 bg-blue-500/5 mix-blend-screen pointer-events-none" />
+      <div className="fixed inset-0 bg-blue-500/5 mix-blend-screen pointer-events-none" />
 
       <div className="max-w-7xl mx-auto relative z-10">
         <header className="mb-8 flex items-center justify-between">
