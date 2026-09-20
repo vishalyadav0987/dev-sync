@@ -97,8 +97,6 @@ const sessionUpdateSchema = z.object({
 // GET /api/sessions/stats — very lightweight endpoint for Header
 router.get("/sessions/stats", async (req, res, next) => {
   try {
-    await updateStreakAndActivity(req.guestId, 0, false);
-    
     const guest = await prisma.guestSession.findUnique({
       where: { id: req.guestId },
       select: { currentStreak: true, longestStreak: true, lastActiveDate: true },
