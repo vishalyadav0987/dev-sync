@@ -233,8 +233,8 @@ export default function DSAPage({ categories: initialCategories = [] }) {
 
             {/* PREMIUM STICKY HEADER */}
             <header className="top-4 z-40 rounded-2xl border border-slate-700/50 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/50 p-5 md:px-8 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 transition-all ring-1 ring-white/5">
-              <div className="flex flex-col gap-2">
-                <h2 className="text-3xl font-black text-white flex items-center gap-3 tracking-tight">
+              <div className="flex flex-col gap-2 flex-1 min-w-0">
+                <h2 className="text-3xl font-black text-white flex items-center gap-3 tracking-tight break-words">
                   {activeProblem.title || activeProblem.name}
                 </h2>
 
@@ -259,7 +259,7 @@ export default function DSAPage({ categories: initialCategories = [] }) {
                 </div>
               </div>
 
-              <div className="flex flex-col xl:items-end gap-2.5 w-full xl:w-auto mt-4 xl:mt-0">
+              <div className="flex flex-col xl:items-end gap-2.5 w-full xl:w-auto mt-4 xl:mt-0 shrink-0">
                 <div className="flex items-center gap-3 w-full xl:w-auto">
                   <button
                     onClick={handleAddToSession}
