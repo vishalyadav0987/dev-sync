@@ -137,6 +137,7 @@ model GuestSession {
   dailyActivities      DailyActivity[]
   wonBattles           BattleResult[]
   extensionSubmissions ExtensionSubmission[]
+  publishedProjects    PublishedProject[]
 }
 
 // ── Extension-submitted LeetCode submissions (real-time sync) ───
@@ -443,4 +444,25 @@ model BattleResult {
   @@index([winnerId])
   @@index([status])
   @@index([finishedAt])
+}
+
+// ── Project Publish (Phase 1) ──────────────────────────────────
+model PublishedProject {
+  id          String   @id @default(uuid())
+  ownerId     String
+  owner       GuestSession @relation(fields: [ownerId], references: [id])
+  name        String
+  slug        String   @unique
+  description String   @db.Text
+  githubUrl   String?
+  liveUrl     String?
+  coverImage  String?
+  tags        String[] @default([])
+  visibility  String   @default("PUBLIC") // PUBLIC | UNLISTED
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  publishedAt DateTime?
+
+  @@index([ownerId])
 }

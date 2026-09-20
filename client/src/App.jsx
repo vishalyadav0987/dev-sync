@@ -22,6 +22,12 @@ import BattleLeaderboardPage from "./pages/BattleLeaderboardPage";
 import BattleUserProfilePage from "./pages/BattleUserProfilePage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
+import ExploreProjects from "./pages/Projects/ExploreProjects";
+import ProjectDetails from "./pages/Projects/ProjectDetails";
+import MyProjects from "./pages/Projects/MyProjects";
+import ProjectLayout from "./pages/Projects/ProjectLayout";
+import PublishProject from "./pages/Projects/PublishProject";
+
 // A wrapper to cleanly route to the correct visualization screen while keeping the same URL
 function VisualizationRouteHandler() {
   const { slug } = useParams();
@@ -71,6 +77,7 @@ export default function App() {
               <Route path="/battle/leaderboard" element={<BattleLeaderboardPage />} />
               <Route path="/battle/user/:guestId" element={<BattleUserProfilePage />} />
               <Route path="/battle/:roomId" element={<BattlePage />} />
+
             </Route>
 
             {/* Main Layout Routes (With Header) */}
@@ -90,6 +97,15 @@ export default function App() {
                 <Route path="editor/:slug?" element={<EditorPage />} />
                 <Route path="saved" element={<SavedPage />} />
                 <Route path="profile" element={<ProfilePage />} />
+              </Route>
+
+              {/* Projects Layout */}
+              <Route path="/projects" element={<ProjectLayout />}>
+                <Route index element={<ExploreProjects />} />
+                <Route path="publish" element={<PublishProject />} />
+                <Route path="edit/:slug" element={<PublishProject />} />
+                <Route path="my-projects" element={<MyProjects />} />
+                <Route path=":slug" element={<ProjectDetails />} />
               </Route>
             </Route>
           </Routes>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Sparkles, Home, Layers, BookOpen, Clock, Activity, CloudDownload, Loader2, X, Trophy } from "lucide-react";
+import { Sparkles, Home, Layers, BookOpen, Clock, Activity, CloudDownload, Loader2, X, Trophy, Folder } from "lucide-react";
 import { api } from "../../lib/api";
 
 function StreakBadge() {
@@ -146,6 +146,10 @@ export default function Header() {
             <NavLink to="/blog" className={navLinkClass}>
               <BookOpen className="w-4 h-4" />
               <span>Blog</span>
+            </NavLink>
+            <NavLink to="/projects" className={navLinkClass}>
+              <Folder className="w-4 h-4 text-indigo-400" />
+              <span>Projects</span>
             </NavLink>
             {/* <NavLink to="/sessions" className={navLinkClass}>
               <Clock className="w-4 h-4" />

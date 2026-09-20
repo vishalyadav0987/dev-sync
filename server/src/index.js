@@ -12,6 +12,7 @@ import adminRouter from "./routes/admin.js";
 import blogsRouter from "./routes/blogs.js";
 import problemsRouter from "./routes/problems.js";
 import sessionsRouter from "./routes/sessions.js";
+import projectsRouter from "./routes/projects.js";
 import adminRoutes from "./routes/admin.js";
 import visualizationsRoutes from "./routes/visualizations.js";
 import leetcodeRoutes from "./routes/leetcode.js";
@@ -72,6 +73,7 @@ app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
 app.use("/api", problemsRouter);
 app.use("/api", blogsRouter);
+app.use("/api", projectsRouter);
 app.use("/api/admin", adminRoutes);
 app.use("/api/visualizations", visualizationsRoutes);
 app.use("/api/leetcode", leetcodeRoutes);

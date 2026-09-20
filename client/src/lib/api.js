@@ -21,8 +21,11 @@ async function request(path, { method = "GET", body, auth = false } = {}) {
 
   if (!res.ok) {
     const payload = await res.json().catch(() => ({}));
-    const errorMsg = payload.error || payload.message || `Server Error: ${res.status} ${res.statusText}`;
-    throw new Error(errorMsg);
+    let errorMessage = payload.error || payload.message || `Server Error: ${res.status} ${res.statusText}`;
+    if (payload?.details) {
+      errorMessage += ": " + JSON.stringify(payload.details);
+    }
+    throw new Error(errorMessage);
   }
   if (res.status === 204) return null;
   return res.json();
@@ -167,5 +170,12 @@ export const api = {
   submitBattleCode: (data) => request(`/battles/submit`, { method: "POST", body: data }),
   getBattleLeaderboard: () => request(`/battles/leaderboard`),
   getUserBattleStats: (guestId) => request(`/battles/user/${guestId}`),
+
+  // Projects (Phase 1)
+  getProjects: (params = {}) => request(`/projects?${new URLSearchParams(params)}`),
+  getProject: (slug) => request(`/projects/${slug}`),
+  createProject: (data) => request(`/projects`, { method: "POST", body: data, auth: true }),
+  updateProject: (id, data) => request(`/projects/${id}`, { method: "PATCH", body: data, auth: true }),
+  deleteProject: (id) => request(`/projects/${id}`, { method: "DELETE", auth: true }),
 };
 
