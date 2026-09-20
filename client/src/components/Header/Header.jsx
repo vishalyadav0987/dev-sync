@@ -147,10 +147,10 @@ export default function Header() {
               <BookOpen className="w-4 h-4" />
               <span>Blog</span>
             </NavLink>
-            <NavLink to="/sessions" className={navLinkClass}>
+            {/* <NavLink to="/sessions" className={navLinkClass}>
               <Clock className="w-4 h-4" />
               <span>Sessions</span>
-            </NavLink>
+            </NavLink> */}
             <NavLink to="/battle/leaderboard" className={navLinkClass}>
               <Trophy className="w-4 h-4 text-yellow-400" />
               <span>Leaderboard</span>
