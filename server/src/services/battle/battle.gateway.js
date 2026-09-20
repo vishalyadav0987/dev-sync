@@ -176,24 +176,60 @@ export function setupBattleGateway(io) {
            const pid = socket.battleParticipant.participantId;
            socket.leave(`battle:${roomId}`);
            
-           await BattleRoomStore.leaveRoom(roomId, pid, socket.battleUuid);
-           const players = await BattleRoomStore.getPlayers(roomId);
-           const updatedRoom = await BattleRoomStore.getRoom(roomId);
-           
-           battleNamespace.to(`battle:${roomId}`).emit("battle:player-left", { 
-             players, 
-             room: updatedRoom,
-             leftParticipant: { displayName: socket.battleParticipant.displayName },
-             currentPlayers: players.length,
-             maxPlayers: updatedRoom ? updatedRoom.maxPlayers : 0
-           });
-           battleNamespace.emit("battle:waiting-updated");
+           const room = await BattleRoomStore.getRoom(roomId);
+           if (room && (room.status === "WAITING" || room.status === "READY")) {
+              await BattleRoomStore.leaveRoom(roomId, pid, socket.battleUuid);
+              const players = await BattleRoomStore.getPlayers(roomId);
+              const updatedRoom = await BattleRoomStore.getRoom(roomId);
+              
+              battleNamespace.to(`battle:${roomId}`).emit("battle:player-left", { 
+                players, 
+                room: updatedRoom,
+                leftParticipant: { displayName: socket.battleParticipant.displayName },
+                currentPlayers: players.length,
+                maxPlayers: updatedRoom ? updatedRoom.maxPlayers : 0
+              });
+              battleNamespace.emit("battle:waiting-updated");
+           } else if (room) {
+              // If ACTIVE, mark DISCONNECTED but don't remove their score
+              await BattleRoomStore.updatePlayer(roomId, pid, { status: "DISCONNECTED" });
+              const players = await BattleRoomStore.getPlayers(roomId);
+              battleNamespace.to(`battle:${roomId}`).emit("battle:player-updated", { players });
+              
+              if (room.status === "ACTIVE") {
+                const activePlayers = players.filter(p => p.status !== "DISCONNECTED");
+                if (activePlayers.length === 0) {
+                   await BattleService.checkAndFinalizeBattle(roomId, battleNamespace, { forceFinish: true, finalStatus: "ABANDONED" });
+                } else {
+                   await BattleService.checkAndFinalizeBattle(roomId, battleNamespace);
+                }
+              }
+           }
            
            socket.battleParticipant = null;
            socket.battleRoom = null;
            socket.battleUuid = null;
          } catch (err) {
            console.error("battle:quit error", err);
+         }
+      }
+      if (callback) callback({ success: true });
+    });
+
+    socket.on("battle:finish_early", async (payload, callback) => {
+      if (socket.battleParticipant && socket.battleRoom) {
+         try {
+           const roomId = socket.battleRoom;
+           const room = await BattleRoomStore.getRoom(roomId);
+           if (room && room.status === "ACTIVE") {
+             const players = await BattleRoomStore.getPlayers(roomId);
+             const activeOpponents = players.filter(p => p.participantId !== socket.battleParticipant.participantId && p.status !== "DISCONNECTED");
+             if (activeOpponents.length === 0) {
+                await BattleService.checkAndFinalizeBattle(roomId, battleNamespace, { forceFinish: true, finalStatus: "EARLY_FINISHED" });
+             }
+           }
+         } catch (err) {
+           console.error("battle:finish_early error", err);
          }
       }
       if (callback) callback({ success: true });
@@ -233,6 +269,15 @@ async function handleDisconnect(socket, io) {
          await BattleRoomStore.updatePlayer(roomId, pid, { status: "DISCONNECTED" });
          const players = await BattleRoomStore.getPlayers(roomId);
          io.to(`battle:${roomId}`).emit("battle:player-updated", { players });
+         
+         if (room.status === "ACTIVE") {
+            const activePlayers = players.filter(p => p.status !== "DISCONNECTED");
+            if (activePlayers.length === 0) {
+               await BattleService.checkAndFinalizeBattle(roomId, io, { forceFinish: true, finalStatus: "ABANDONED" });
+            } else {
+               await BattleService.checkAndFinalizeBattle(roomId, io);
+            }
+         }
       }
       
       socket.battleParticipant = null;

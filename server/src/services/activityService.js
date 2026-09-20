@@ -20,28 +20,31 @@ export async function updateStreakAndActivity(guestId, timeSpent = 0, isSolved =
   });
 
   // 2. Update Streak
-  const guest = await prisma.guestSession.findUnique({ where: { id: guestId } });
-  if (guest) {
-    let { currentStreak, longestStreak, lastActiveDate } = guest;
-    
-    if (lastActiveDate !== dateStr) {
-      const yesterday = new Date(now);
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split("T")[0];
+  // Only update streak if a problem was actually solved (meaningful activity)
+  if (isSolved) {
+    const guest = await prisma.guestSession.findUnique({ where: { id: guestId } });
+    if (guest) {
+      let { currentStreak, longestStreak, lastActiveDate } = guest;
       
-      if (lastActiveDate === yesterdayStr) {
-        currentStreak += 1;
-      } else {
-        currentStreak = 1; // reset streak if they missed a day
+      if (lastActiveDate !== dateStr) {
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split("T")[0];
+        
+        if (lastActiveDate === yesterdayStr) {
+          currentStreak += 1;
+        } else {
+          currentStreak = 1; // reset streak if they missed a day
+        }
+        
+        if (currentStreak > longestStreak) longestStreak = currentStreak;
+        lastActiveDate = dateStr;
+        
+        await prisma.guestSession.update({
+          where: { id: guestId },
+          data: { currentStreak, longestStreak, lastActiveDate }
+        });
       }
-      
-      if (currentStreak > longestStreak) longestStreak = currentStreak;
-      lastActiveDate = dateStr;
-      
-      await prisma.guestSession.update({
-        where: { id: guestId },
-        data: { currentStreak, longestStreak, lastActiveDate }
-      });
     }
   }
 }

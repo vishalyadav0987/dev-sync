@@ -13,6 +13,7 @@
 import { Worker } from "bullmq";
 import { Judge0Runner } from "./judge0.runner.js";
 import { CppRunner } from "./cpp.runner.js"; // Kept for generating stdin/harness if needed
+import { LocalRunner } from "./local.runner.js";
 import { JudgeService } from "./judge.service.js";
 import battlePrisma from "../../lib/battlePrisma.js";
 
@@ -94,72 +95,86 @@ async function processJob(job) {
       message: "Ready. Running tests..."
     });
 
+    const stdinParts = [testCases.length.toString()];
+    for (const tc of testCases) {
+      stdinParts.push(CppRunner.generateStdin(tc.input, paramNames).trimEnd());
+    }
+    const stdinInput = stdinParts.join("\n") + "\n";
+
+    emitExecutionEvent(roomId, uuid, "execution:status", {
+      jobId,
+      problemId,
+      status: "RUNNING",
+      message: "Running tests..."
+    });
+
+    let runResult;
+    if (language.toLowerCase() === 'cpp') {
+      const workDir = await CppRunner.createWorkDir();
+      try {
+        const compRes = await CppRunner.compile(fullSource, workDir);
+        if (!compRes.success) {
+           runResult = {
+             success: false,
+             status: "COMPILE_ERROR",
+             error: compRes.error,
+             runtimeMs: 0
+           };
+        } else {
+           // Retry once for TLE to bypass MacOS Gatekeeper cold start delays
+           for (let attempt = 1; attempt <= 2; attempt++) {
+             runResult = await CppRunner.run(
+               compRes.executablePath, 
+               stdinInput,
+               testCases[0]?.timeLimitMs || 2000,
+               testCases[0]?.memoryLimitMb || 256
+             );
+             if (runResult.status !== "TIME_LIMIT_EXCEEDED") break;
+           }
+        }
+      } finally {
+        await CppRunner.cleanupWorkDir(workDir);
+      }
+    } else {
+      // Retry once for Javascript/Python cold starts
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        runResult = await LocalRunner.run(
+          fullSource,
+          language,
+          stdinInput,
+          testCases[0]?.timeLimitMs || 2000,
+          testCases[0]?.memoryLimitMb || 256
+        );
+        if (runResult.status !== "TIME_LIMIT_EXCEEDED") break;
+      }
+    }
+
+    const stdoutLines = (runResult.stdout || "")
+      .split("\n")
+      .map(s => s.trim())
+      .filter(s => s !== "");
+
     const results = [];
     let allPassed = true;
 
     for (let i = 0; i < testCases.length; i++) {
       const tc = testCases[i];
-
-      emitExecutionEvent(roomId, uuid, "execution:test-update", {
-        jobId,
-        problemId,
-        testIndex: i,
-        testOrder: tc.order,
-        isPublic: tc.isPublic,
-        totalTests: testCases.length,
-        status: "RUNNING"
-      });
-
-      // Generate stdin using CppRunner's serializer for now
-      const stdinInput = CppRunner.generateStdin(tc.input, paramNames);
-
-      let runResult;
-      
-      if (language.toLowerCase() === 'cpp') {
-        const workDir = await CppRunner.createWorkDir();
-        try {
-          const compRes = await CppRunner.compile(fullSource, workDir);
-          if (!compRes.success) {
-             runResult = {
-               success: false,
-               status: "COMPILE_ERROR",
-               error: compRes.error,
-               runtimeMs: 0
-             };
-          } else {
-             runResult = await CppRunner.run(
-               compRes.executablePath, 
-               stdinInput,
-               tc.timeLimitMs || 2000,
-               tc.memoryLimitMb || 256
-             );
-          }
-        } finally {
-          await CppRunner.cleanupWorkDir(workDir);
-        }
-      } else {
-        // Run via Judge0 for other languages
-        runResult = await Judge0Runner.run(
-          fullSource,
-          language,
-          stdinInput,
-          tc.timeLimitMs || 2000,
-          tc.memoryLimitMb || 256
-        );
-      }
-
       let testStatus;
       let testMessage = null;
       let testActual = null;
 
-      if (!runResult.success) {
-        testStatus = runResult.status; // COMPILE_ERROR, TIME_LIMIT_EXCEEDED, RUNTIME_ERROR, etc.
-        testMessage = runResult.error || (runResult.status === "RUNTIME_ERROR" ? "Runtime Error" : runResult.status.replace(/_/g, " "));
+      if (!runResult.success && i >= stdoutLines.length) {
+        if (i === stdoutLines.length) {
+          testStatus = runResult.status;
+          testMessage = runResult.error || (runResult.status === "RUNTIME_ERROR" ? "Runtime Error" : runResult.status.replace(/_/g, " "));
+        } else {
+          testStatus = "SKIPPED";
+          testMessage = "Skipped due to previous failure";
+        }
         testActual = "null";
         allPassed = false;
-      } else {
-        // Parse output and compare
-        const actualOutput = JudgeService.parseOutput(runResult.stdout);
+      } else if (i < stdoutLines.length) {
+        const actualOutput = JudgeService.parseOutput(stdoutLines[i]);
         testActual = actualOutput;
         const comparison = JudgeService.compare(actualOutput, tc.expected, comparisonMode || "exact");
 
@@ -170,6 +185,12 @@ async function processJob(job) {
           testMessage = comparison.message;
           allPassed = false;
         }
+      } else {
+        // Fallback if stdout is missing but runResult claims success (e.g., user forgot to return anything or printed empty)
+        testStatus = "WRONG_ANSWER";
+        testMessage = "Missing output";
+        testActual = "null";
+        allPassed = false;
       }
 
       const testResult = {
@@ -179,7 +200,6 @@ async function processJob(job) {
         status: testStatus,
         runtimeMs: runResult.runtimeMs,
         message: testMessage,
-        // Only include I/O details for public tests
         ...(tc.isPublic ? {
           input: tc.input,
           expected: tc.expected,
@@ -189,7 +209,6 @@ async function processJob(job) {
 
       results.push(testResult);
 
-      // Notify: test result
       emitExecutionEvent(roomId, uuid, "execution:test-update", {
         jobId,
         problemId,
@@ -197,17 +216,25 @@ async function processJob(job) {
         totalTests: testCases.length
       });
 
-      // For SUBMIT mode with "stop on first failure" strategy
       if (mode === "SUBMIT" && !allPassed) {
-        // Mark remaining tests as skipped
         for (let j = i + 1; j < testCases.length; j++) {
-          results.push({
+          const skipTc = testCases[j];
+          const skipResult = {
             testIndex: j,
-            testOrder: testCases[j].order,
-            isPublic: testCases[j].isPublic,
+            testOrder: skipTc.order,
+            isPublic: skipTc.isPublic,
             status: "SKIPPED",
             runtimeMs: 0,
-            message: "Skipped due to previous failure"
+            message: "Skipped due to previous failure",
+            ...(skipTc.isPublic ? {
+              input: skipTc.input,
+              expected: skipTc.expected,
+              actual: "null"
+            } : {})
+          };
+          results.push(skipResult);
+          emitExecutionEvent(roomId, uuid, "execution:test-update", {
+             jobId, problemId, ...skipResult, totalTests: testCases.length
           });
         }
         break;
@@ -228,6 +255,34 @@ async function processJob(job) {
       finalStatus = "TIME_LIMIT_EXCEEDED";
     }
     const maxRuntime = Math.max(...results.filter(r => r.runtimeMs).map(r => r.runtimeMs), 0);
+
+    // Update score if it's a SUBMIT
+    if (mode === "SUBMIT") {
+      try {
+        const { BattleRoomStore } = await import("../battle/battle.room.js");
+        const updatedPlayer = await BattleRoomStore.updatePlayerScore(
+          roomId,
+          participantId,
+          problemId,
+          passedCount
+        );
+        
+        if (updatedPlayer) {
+          // You could optionally emit a score update event here, 
+          // but the client will also poll or receive updates through other means.
+          emitExecutionEvent(roomId, uuid, "battle:score-updated", {
+            participantId,
+            totalScore: updatedPlayer.totalScore
+          });
+
+          // Centralized finish logic
+          const { BattleService } = await import("../battle/battle.service.js");
+          await BattleService.checkAndFinalizeBattle(roomId, ioInstance ? ioInstance.of("/battle") : null);
+        }
+      } catch (err) {
+        console.error("Failed to update player score:", err);
+      }
+    }
 
     emitExecutionEvent(roomId, uuid, "execution:completed", {
       jobId,

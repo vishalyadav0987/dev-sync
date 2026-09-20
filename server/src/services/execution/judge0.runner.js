@@ -33,9 +33,16 @@ ${code}
 const fs = require('fs');
 const input = fs.readFileSync(0, 'utf-8').trim().split('\\n');
 if (input.length > 0 && input[0] !== '') {
-  const args = input.filter(line => line.trim()).map(line => JSON.parse(line));
-  const result = ${functionName}(...args);
-  console.log(JSON.stringify(result));
+  const numTestCases = parseInt(input[0]);
+  let lineIdx = 1;
+  for (let t = 0; t < numTestCases; t++) {
+    const args = [];
+    for (let p = 0; p < ${paramTypes.length}; p++) {
+      args.push(JSON.parse(input[lineIdx++]));
+    }
+    const result = ${functionName}(...args);
+    console.log(JSON.stringify(result));
+  }
 }
 `;
     }
@@ -50,10 +57,16 @@ ${code}
 if __name__ == "__main__":
     input_lines = [line for line in sys.stdin.read().strip().split('\\n') if line.strip()]
     if input_lines:
-        args = [json.loads(line) for line in input_lines]
+        num_test_cases = int(input_lines[0])
+        line_idx = 1
         sol = Solution()
-        result = getattr(sol, '${functionName}')(*args)
-        print(json.dumps(result, separators=(',', ':')))
+        for _ in range(num_test_cases):
+            args = []
+            for _ in range(${paramTypes.length}):
+                args.append(json.loads(input_lines[line_idx]))
+                line_idx += 1
+            result = getattr(sol, '${functionName}')(*args)
+            print(json.dumps(result, separators=(',', ':')))
 `;
     }
     
@@ -64,8 +77,8 @@ if __name__ == "__main__":
       };
       
       const argsParsing = paramTypes.map((type, i) => {
-        return `${typeMap[type] || 'String'} arg${i} = parse_${type.replace(/\\[\\]/g, 'Array')}(lines[${i}]);`;
-      }).join('\\n        ');
+        return `${typeMap[type] || 'String'} arg${i} = parse_${type.replace(/\\[\\]/g, 'Array')}(lines[lineIdx++]);`;
+      }).join('\\n            ');
 
       const argList = paramTypes.map((_, i) => `arg${i}`).join(', ');
 
@@ -90,11 +103,15 @@ public class Main {
         if (linesList.isEmpty()) return;
         String[] lines = linesList.toArray(new String[0]);
         
-        ${argsParsing}
-        
+        int numTestCases = Integer.parseInt(lines[0].trim());
+        int lineIdx = 1;
         Solution sol = new Solution();
-        ${typeMap[returnType] || 'void'} result = sol.${functionName}(${argList});
-        System.out.println(serialize(result));
+        for (int t = 0; t < numTestCases; t++) {
+            ${argsParsing}
+            
+            ${typeMap[returnType] || 'void'} result = sol.${functionName}(${argList});
+            System.out.println(serialize(result));
+        }
     }
 
     static int parse_int(String s) { return Integer.parseInt(s.trim()); }
@@ -413,13 +430,17 @@ int main() {
 
   Solution solution;
 
+  int __numTestCases = readInt(cin);
+  for (int __t = 0; __t < __numTestCases; __t++) {
 ${paramDeclarations}
 
-  auto result = solution.${functionName}(${paramCallArgs});
+    auto result = solution.${functionName}(${paramCallArgs});
 
-  ${outputPrinter}
+    ${outputPrinter}
 
-  cout << endl;
+    cout << "\\n";
+  }
+
   return 0;
 }
 `;

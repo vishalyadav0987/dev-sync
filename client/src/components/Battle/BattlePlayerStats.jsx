@@ -37,7 +37,7 @@ export function BattlePlayerStats({ players, room }) {
       
       <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2 custom-scrollbar">
         {players.map((p) => {
-          const solvedCount = p.solvedProblems ? p.solvedProblems.length : 0;
+          const totalScore = p.totalScore || 0;
           return (
             <div key={p.participantId} className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-3 flex flex-col gap-2 transition-colors hover:bg-slate-800">
               <div className="flex justify-between items-start">
@@ -62,15 +62,15 @@ export function BattlePlayerStats({ players, room }) {
                   {getStatusDisplay(p.status)}
                 </div>
                 <div className="text-xs font-mono font-bold text-slate-400">
-                  {solvedCount} / {totalProblems}
+                  {totalScore} Score
                 </div>
               </div>
 
-              {/* Progress Bar */}
+              {/* Progress Bar - just showing if they have score > 0 for now since we might not know max score here */}
               <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden mt-1">
                 <div 
-                  className={`h-full rounded-full transition-all duration-500 ${solvedCount === totalProblems ? 'bg-emerald-500' : 'bg-indigo-500'}`}
-                  style={{ width: `${(solvedCount / totalProblems) * 100}%` }}
+                  className={`h-full rounded-full transition-all duration-500 ${totalScore > 0 ? 'bg-indigo-500' : 'bg-transparent'}`}
+                  style={{ width: `${Math.min((totalScore / (totalProblems * 10)) * 100, 100)}%` }} // rough estimate of progress
                 />
               </div>
             </div>

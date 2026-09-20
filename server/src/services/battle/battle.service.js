@@ -244,17 +244,7 @@ export class BattleService {
         const duration = room.durationMinutes ? room.durationMinutes * 60 : parseInt(process.env.BATTLE_DURATION_SECONDS || "1800", 10);
         setTimeout(async () => {
           // Check if it's still active (might have finished early)
-          const currentRoom = await BattleRoomStore.getRoom(roomId);
-          if (currentRoom && currentRoom.status === "ACTIVE") {
-            const rankings = await BattleService.computeRankings(roomId);
-            const winnerPid = rankings.length > 0 && rankings[0].solvedCount > 0 ? rankings[0].participantId : null;
-            await BattleService.finalizeBattle(roomId, { status: "EXPIRED", winnerParticipantId: winnerPid, rankings });
-            const finalRoom = await BattleRoomStore.getRoom(roomId);
-            ioNamespace.to(`battle:${roomId}`).emit("battle:results", { 
-              room: finalRoom, 
-              rankings 
-            });
-          }
+          await BattleService.checkAndFinalizeBattle(roomId, ioNamespace, { forceFinish: true, finalStatus: "EXPIRED" });
         }, duration * 1000);
       }
     }, 1000);
@@ -275,26 +265,26 @@ export class BattleService {
     const startedAt = room.startedAt || Date.now();
 
     const ranked = players.map(p => {
-      const solvedCount = p.solvedProblems ? p.solvedProblems.length : 0;
-      // finishedAt is the timestamp when this player completed all problems
-      const finishTimeMs = p.finishedAt ? (p.finishedAt - startedAt) : null;
+      const totalScore = p.totalScore || 0;
+      // scoreAchievedAt is the timestamp when this player achieved their latest score
+      const finishTimeMs = p.scoreAchievedAt ? (p.scoreAchievedAt - startedAt) : null;
       const finishTimeSec = finishTimeMs ? Math.round(finishTimeMs / 1000) : null;
 
       return {
         participantId: p.participantId,
         uuid: p.uuid,
         displayName: p.displayName,
-        solvedCount,
+        totalScore,
         totalProblems,
-        finishTimeSec, // null if they didn't finish all problems
+        finishTimeSec, // null if they didn't score anything yet
         status: p.status,
       };
     });
 
-    // Sort: most problems solved first, then fastest finish time
+    // Sort: highest score first, then fastest finish time
     ranked.sort((a, b) => {
-      if (b.solvedCount !== a.solvedCount) return b.solvedCount - a.solvedCount;
-      // Both have same solve count. If both finished, compare times (lower = better)
+      if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+      // Both have same score. Compare times (lower = better)
       const aTime = a.finishTimeSec ?? Infinity;
       const bTime = b.finishTimeSec ?? Infinity;
       return aTime - bTime;
@@ -349,17 +339,17 @@ export class BattleService {
             uuid: r.uuid,
             displayName: r.displayName,
             rank: r.rank,
-            solvedCount: r.solvedCount,
+            totalScore: r.totalScore,
             totalProblems: r.totalProblems,
             finishTimeSec: r.finishTimeSec,
-            isWinner: r.rank === 1 && r.solvedCount > 0
+            isWinner: r.rank === 1 && r.totalScore > 0
           }))
         : players.map(p => ({
             participantId: p.participantId,
             uuid: p.uuid,
             displayName: p.displayName,
             rank: null,
-            solvedCount: p.solvedProblems ? p.solvedProblems.length : 0,
+            totalScore: p.totalScore || 0,
             totalProblems: room.problemIds ? room.problemIds.length : 0,
             finishTimeSec: null,
             isWinner: p.participantId === winnerParticipantId
@@ -379,6 +369,19 @@ export class BattleService {
         }
       });
 
+      // Update streak and activity for each participating player
+      try {
+        const { updateStreakAndActivity } = await import("../activityService.js");
+        for (const player of sanitizedPlayers) {
+          if (player.uuid && player.totalScore > 0) {
+            // Player actively participated and scored at least 1 point
+            await updateStreakAndActivity(player.uuid, durationSeconds || 0, true);
+          }
+        }
+      } catch (err) {
+        console.error("[BattleService] Failed to update streak for battle participants:", err);
+      }
+
       return battleResult;
     } catch (e) {
       console.error("[BattleService] Failed to finalize battle", e);
@@ -390,17 +393,46 @@ export class BattleService {
   }
 
   /**
-   * Called when ALL players have finished. Ends the battle early with rankings.
+   * Centralized completion logic for battles.
+   * Checks if completion is required, then performs atomic transition to avoid duplicates.
    */
-  static async endBattleEarly(roomId, ioNamespace) {
-    const rankings = await this.computeRankings(roomId);
-    const winnerPid = rankings.length > 0 && rankings[0].solvedCount > 0 ? rankings[0].participantId : null;
-    await this.finalizeBattle(roomId, { status: "FINISHED", winnerParticipantId: winnerPid, rankings });
-    const finalRoom = await BattleRoomStore.getRoom(roomId);
-    ioNamespace.to(`battle:${roomId}`).emit("battle:results", {
-      room: finalRoom,
-      rankings
-    });
+  static async checkAndFinalizeBattle(roomId, ioNamespace, options = { forceFinish: false, finalStatus: "FINISHED" }) {
+    const room = await BattleRoomStore.getRoom(roomId);
+    if (!room || room.status !== "ACTIVE") return false;
+
+    const players = await BattleRoomStore.getPlayers(roomId);
+    const activePlayers = players.filter(p => p.status !== "DISCONNECTED");
+
+    let allPerfect = false;
+    if (!options.forceFinish && activePlayers.length > 0) {
+      const battleData = await this.getBattle(roomId);
+      let totalPossibleScore = 0;
+      for (const prob of battleData.problems) {
+        totalPossibleScore += prob.totalTestCases;
+      }
+      allPerfect = activePlayers.every(p => p.totalScore >= totalPossibleScore);
+    }
+
+    if (options.forceFinish || allPerfect) {
+      // Atomic transition
+      const updated = await BattleRoomStore.updateRoomStatusIfActive(roomId, options.finalStatus);
+      if (!updated) return false;
+
+      const rankings = await this.computeRankings(roomId);
+      const winnerPid = rankings.length > 0 && rankings[0].totalScore > 0 ? rankings[0].participantId : null;
+      
+      await this.finalizeBattle(roomId, { status: options.finalStatus, winnerParticipantId: winnerPid, rankings });
+
+      const finalRoom = await BattleRoomStore.getRoom(roomId);
+      if (ioNamespace) {
+        ioNamespace.to(`battle:${roomId}`).emit("battle:results", {
+          room: finalRoom,
+          rankings
+        });
+      }
+      return true;
+    }
+    return false;
   }
 
   /**

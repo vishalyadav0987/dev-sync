@@ -132,19 +132,60 @@ export class BattleRoomStore {
     }
   }
 
-  static async addSolvedProblem(roomId, participantId, problemId) {
+  static async updateRoomStatusIfActive(roomId, newStatus) {
+    const roomKey = BATTLE_KEYS.room(roomId);
+    
+    const luaScript = `
+      local status = redis.call("HGET", KEYS[1], "status")
+      if status == "ACTIVE" then
+        redis.call("HSET", KEYS[1], "status", ARGV[1])
+        if ARGV[1] == "FINISHED" or ARGV[1] == "EXPIRED" or ARGV[1] == "ABANDONED" then
+          redis.call("HSET", KEYS[1], "finishedAt", ARGV[2])
+          redis.call("EXPIRE", KEYS[1], 600)
+        end
+        return 1
+      end
+      return 0
+    `;
+    
+    const result = await redisClient.eval(luaScript, 1, roomKey, newStatus, Date.now().toString());
+    
+    if (result === 1) {
+      if (newStatus !== "WAITING") {
+        await redisClient.srem(BATTLE_KEYS.waitingRooms(), roomId);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  static async updatePlayerScore(roomId, participantId, problemId, newScore) {
     const playerKey = BATTLE_KEYS.player(roomId, participantId);
     const metaStr = await redisClient.get(playerKey);
     if (!metaStr) return null;
     
     const player = JSON.parse(metaStr);
-    const solved = player.solvedProblems || [];
-    if (!solved.includes(problemId)) {
-      solved.push(problemId);
+    const scores = player.scores || {};
+    
+    const previousScore = scores[problemId] || 0;
+    
+    // Only update if the new score is strictly better than the previous
+    if (newScore > previousScore) {
+      scores[problemId] = newScore;
+      
+      const totalScore = Object.values(scores).reduce((sum, s) => sum + s, 0);
+      
+      const updated = {
+        ...player,
+        scores,
+        totalScore,
+        scoreAchievedAt: Date.now()
+      };
+      
+      await redisClient.set(playerKey, JSON.stringify(updated));
+      return updated;
     }
     
-    const updated = { ...player, solvedProblems: solved };
-    await redisClient.set(playerKey, JSON.stringify(updated));
-    return updated;
+    return player;
   }
 }

@@ -422,6 +422,38 @@ export default function BattlePage() {
         </div>
       </div>
 
+      {/* Waiting for Opponent Overlay */}
+      {(() => {
+        if (results || winner || !problems || problems.length === 0) return null;
+        const me = players.find(p => p.uuid === uuid);
+        if (!me) return null;
+        
+        let totalPossibleScore = 0;
+        for (const prob of problems) {
+          totalPossibleScore += (prob.totalTestCases || 0);
+        }
+        
+        // If the current player has reached the max score but the battle is still active
+        if (totalPossibleScore > 0 && me.totalScore >= totalPossibleScore && room?.status === 'ACTIVE') {
+          return (
+            <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#030712]/70 backdrop-blur-sm pointer-events-none">
+              <div className="bg-slate-800/90 border border-emerald-500/30 shadow-2xl rounded-2xl p-6 max-w-md w-full mx-4 transform animate-in slide-in-from-bottom-10 duration-500 pointer-events-auto text-center">
+                <div className="text-4xl mb-3">✅</div>
+                <h3 className="text-xl font-bold text-white mb-2">All Problems Solved!</h3>
+                <p className="text-slate-300 text-sm mb-4">
+                  You've successfully passed all test cases. Waiting for the other players to finish or the timer to expire.
+                </p>
+                <div className="flex items-center justify-center gap-2 text-emerald-400 text-sm font-medium">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Please stay in the room...</span>
+                </div>
+              </div>
+            </div>
+          );
+        }
+        return null;
+      })()}
+
       {/* Results / Winner Overlay */}
       {(results || winner) && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#030712]/90 backdrop-blur-md overflow-y-auto">
@@ -439,7 +471,7 @@ export default function BattlePage() {
                     <tr className="bg-slate-900 border-b border-slate-700 text-slate-400 text-sm">
                       <th className="p-4 font-semibold w-16 text-center">Rank</th>
                       <th className="p-4 font-semibold">Player</th>
-                      <th className="p-4 font-semibold text-center">Solved</th>
+                      <th className="p-4 font-semibold text-center">Score</th>
                       <th className="p-4 font-semibold text-center">Time</th>
                     </tr>
                   </thead>
@@ -456,8 +488,8 @@ export default function BattlePage() {
                           {r.isWinner && <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30">Winner</span>}
                         </td>
                         <td className="p-4 text-center">
-                          <span className={`font-mono ${r.solvedCount === r.totalProblems && r.totalProblems > 0 ? 'text-emerald-400' : 'text-slate-300'}`}>
-                            {r.solvedCount} / {r.totalProblems}
+                          <span className={`font-mono ${r.totalScore > 0 ? 'text-emerald-400' : 'text-slate-300'}`}>
+                            {r.totalScore || 0}
                           </span>
                         </td>
                         <td className="p-4 text-center text-slate-400 font-mono">
@@ -507,9 +539,16 @@ export default function BattlePage() {
               <button
                 onClick={() => {
                   if (socketRef.current) {
-                    socketRef.current.emit("battle:quit", {}, () => {
-                      navigate('/');
-                    });
+                    const activeOpponents = players.filter(p => p.uuid !== uuid && p.status !== "DISCONNECTED");
+                    if (activeOpponents.length === 0 && room.status === "ACTIVE") {
+                       socketRef.current.emit("battle:finish_early", {}, () => {
+                          setShowExitConfirm(false);
+                       });
+                    } else {
+                       socketRef.current.emit("battle:quit", {}, () => {
+                         navigate('/');
+                       });
+                    }
                   } else {
                     navigate('/');
                   }
