@@ -14,7 +14,7 @@ const CATEGORY_COLORS = [
 ];
 
 document.addEventListener('DOMContentLoaded', () => {
-  const statusContainer = document.getElementById('status-container');
+  const skeletonView = document.getElementById('skeleton-view');
   const dashboardView = document.getElementById('dashboard-view');
   const settingsView = document.getElementById('settings-view');
   const missingLcState = document.getElementById('missing-lc-state');
@@ -38,6 +38,22 @@ document.addEventListener('DOMContentLoaded', () => {
   const countHard = document.getElementById('count-hard');
   const weeklyTracker = document.getElementById('weekly-tracker');
 
+  // INSTANT CACHE CHECK (prevents skeleton flicker)
+  let initialCache = null;
+  try {
+    chrome.storage.local.get('statsCache', (cached) => {
+      if (cached && cached.statsCache) {
+        initialCache = cached.statsCache;
+        skeletonView.style.display = 'none';
+        dashboardView.style.display = 'block';
+        renderStats(initialCache);
+      } else {
+        // No cache, show skeleton while loading
+        skeletonView.style.display = 'block';
+      }
+    });
+  } catch(e) {}
+
   // View Navigation
   settingsBtn.addEventListener('click', () => {
     dashboardView.style.display = 'none';
@@ -56,18 +72,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Check current status from background
   chrome.runtime.sendMessage({ type: 'CHECK_STATUS' }, async (response) => {
-    statusContainer.style.display = 'none';
-
     if (!response || !response.leetCodeLinked) {
+      skeletonView.style.display = 'none';
+      dashboardView.style.display = 'none';
       missingLcState.style.display = 'block';
     } else {
       // Connected via LeetCode
       lcUsername.textContent = response.username || "Unknown";
 
-      // Fetch stats from server
+      // Always fetch fresh stats (cache was already rendered above for instant display)
       await loadStats(response.guestId);
+    }
+  });
 
-      dashboardView.style.display = 'block';
+  // Listen for live updates from background script
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.type === 'SYNC_SUCCESS') {
+      // Re-fetch stats live without needing to reopen popup
+      chrome.storage.local.get(['guestId'], (result) => {
+        if (result.guestId) loadStats(result.guestId);
+      });
     }
   });
 
@@ -112,14 +136,39 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!guestId) return;
 
     try {
+      // 1. Check Cache First (Render instantly)
+      const cached = await chrome.storage.local.get('statsCache');
+      if (cached.statsCache) {
+        renderStats(cached.statsCache);
+        skeletonView.style.display = 'none';
+        dashboardView.style.display = 'block';
+      }
+
+      // 2. Always fetch fresh stats (Stale-while-revalidate)
       const res = await fetch(`${API_URL}/stats`, {
         headers: { "x-extension-guest-id": guestId }
       });
       const data = await res.json();
 
       if (data.success) {
-        // Update Streak
-        streakCount.textContent = `${data.currentStreak || 0} day streak!`;
+        await chrome.storage.local.set({ statsCache: data });
+        renderStats(data);
+      }
+      
+      // Hide skeleton if it wasn't hidden by cache
+      skeletonView.style.display = 'none';
+      dashboardView.style.display = 'block';
+    } catch (err) {
+      console.error("Failed to load extension stats:", err);
+      skeletonView.style.display = 'none';
+      dashboardView.style.display = 'block';
+    }
+  }
+
+  function renderStats(data) {
+    if (data.success) {
+      // Update Streak
+      streakCount.textContent = `${data.currentStreak || 0} day streak!`;
 
         // Update Stats
         const stats = data.stats;
@@ -233,9 +282,6 @@ document.addEventListener('DOMContentLoaded', () => {
             weeklyTracker.appendChild(col);
           });
         }
-      }
-    } catch (err) {
-      console.error("Failed to load extension stats:", err);
     }
   }
 });

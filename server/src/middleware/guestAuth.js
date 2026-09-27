@@ -18,7 +18,7 @@ export async function guestIdentity(req, res, next) {
   const guestId = req.header("x-guest-id");
 
   if (!guestId || !UUID_RE.test(guestId)) {
-    return res.status(400).json({ error: "Missing or invalid x-guest-id header" });
+    console.log("guestIdentity 400 at:", req.originalUrl); console.trace("Trace for guestIdentity"); return res.status(400).json({ error: "Missing or invalid x-guest-id header" });
   }
 
   try {

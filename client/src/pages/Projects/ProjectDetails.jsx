@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import { format } from "date-fns";
-import { ArrowLeft, Globe, Code2, Calendar, BookOpen, User, Tag } from "lucide-react";
+import { ArrowLeft, Globe, Code2, Calendar, BookOpen, User, Tag, Heart, Bookmark, Eye, MessageSquare, GitFork, GitBranch } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
-import { api } from "../../lib/api";
+import { api, socket, API_BASE_URL } from "../../lib/api";
+import { getGuestId } from "../../hooks/useGuestId";
+import ProjectComments from "./ProjectComments";
 
 export default function ProjectDetails() {
   const { slug } = useParams();
@@ -12,11 +14,40 @@ export default function ProjectDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const [interactions, setInteractions] = useState({ likes: 0, views: 0, saves: 0, isLiked: false, isSaved: false });
+  const [githubConnected, setGithubConnected] = useState(false);
+  const [forking, setForking] = useState(false);
+  const hasViewed = useRef(false);
+
   useEffect(() => {
     async function load() {
       try {
         const data = await api.getProject(slug);
         setProject(data.project);
+        
+        // Register view and fetch interactions
+        if (!hasViewed.current) {
+          hasViewed.current = true;
+          api.viewProject(data.project.id).then(res => setInteractions(prev => ({ ...prev, views: res.views }))).catch(console.error);
+        }
+        
+        const [interactionsRes, statsRes] = await Promise.all([
+          api.getProjectInteractions(data.project.id).catch(() => null),
+          api.getGuestStats().catch(() => ({}))
+        ]);
+
+        if (interactionsRes) {
+          setInteractions(prev => ({
+              ...prev,
+              likes: interactionsRes.likesCount,
+              saves: interactionsRes.savesCount,
+              isLiked: interactionsRes.isLiked,
+              isSaved: interactionsRes.isSaved,
+          }));
+        }
+
+        setGithubConnected(statsRes.githubConnected || false);
+
       } catch (err) {
         setError("Failed to load project details");
         console.error(err);
@@ -26,6 +57,110 @@ export default function ProjectDetails() {
     }
     load();
   }, [slug]);
+
+  useEffect(() => {
+    const handleStatsUpdated = ({ projectId, updates }) => {
+      if (project?.id === projectId) {
+        setInteractions(prev => {
+          const newInteractions = { ...prev };
+          if (updates._count?.likes !== undefined) newInteractions.likes = updates._count.likes;
+          if (updates.saves !== undefined) newInteractions.saves = updates.saves;
+          if (updates.views !== undefined) newInteractions.views = updates.views;
+          return newInteractions;
+        });
+        
+        setProject(prev => {
+          const newProject = { ...prev };
+          if (updates.githubClicks !== undefined) newProject.githubClicks = updates.githubClicks;
+          if (updates.liveClicks !== undefined) newProject.liveClicks = updates.liveClicks;
+          return newProject;
+        });
+      }
+    };
+    
+    const handleNewComment = ({ projectId, comment }) => {
+      if (project?.id === projectId) {
+        setComments(prev => [comment, ...prev]);
+        setInteractions(prev => ({ ...prev, comments: (prev.comments || 0) + 1 }));
+      }
+    };
+
+    socket.on("project:statsUpdated", handleStatsUpdated);
+    socket.on("project:newComment", handleNewComment);
+    return () => {
+      socket.off("project:statsUpdated", handleStatsUpdated);
+      socket.off("project:newComment", handleNewComment);
+    };
+  }, [project?.id]);
+
+  const toggleLike = async () => {
+    try {
+        const res = await api.likeProject(project.id);
+        setInteractions(prev => ({
+            ...prev,
+            isLiked: res.isLiked,
+            likes: res.isLiked ? prev.likes + 1 : prev.likes - 1
+        }));
+    } catch(err) { console.error(err); }
+  }
+
+  const toggleSave = async () => {
+    try {
+        const res = await api.saveProject(project.id);
+        setInteractions(prev => ({
+            ...prev,
+            isSaved: res.isSaved,
+            saves: res.isSaved ? prev.saves + 1 : prev.saves - 1
+        }));
+    } catch(err) { console.error(err); }
+  }
+
+  const handleGithubClick = async () => {
+    if (!project) return;
+    try {
+      api.clickProjectGithub(project.id).catch(console.error);
+      setProject(prev => ({ ...prev, githubClicks: (prev.githubClicks || 0) + 1 }));
+    } catch (e) {}
+  };
+
+  const handleLiveClick = async () => {
+    if (!project) return;
+    try {
+      api.clickProjectLive(project.id).catch(console.error);
+      setProject(prev => ({ ...prev, liveClicks: (prev.liveClicks || 0) + 1 }));
+    } catch (e) {}
+  };
+
+  const handleConnectGithub = () => {
+    const guestId = getGuestId();
+    window.location.href = `${API_BASE_URL}/github/login?guestId=${guestId}`;
+  };
+
+  const handleFork = async () => {
+    if (!githubConnected) {
+      handleConnectGithub();
+      return;
+    }
+    setForking(true);
+    try {
+      const res = await api.forkProject(project.id);
+      if (res.forkUrl) {
+        window.open(res.forkUrl, "_blank");
+      } else {
+        alert("Fork successful!");
+      }
+    } catch (err) {
+      // Token expired — re-trigger GitHub OAuth
+      if (err?.requireReauth) {
+        setGithubConnected(false);
+        handleConnectGithub();
+        return;
+      }
+      alert(err.message || "Failed to fork project");
+    } finally {
+      setForking(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -77,29 +212,66 @@ export default function ProjectDetails() {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 shrink-0">
+        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4 shrink-0">
+          
+          <div className="flex items-center gap-4 text-slate-400 text-sm font-medium border-r border-slate-800 pr-4">
+            <div className="flex items-center gap-1.5" title="Views">
+              <Eye size={16} /> {interactions.views}
+            </div>
+            <button onClick={toggleLike} className={`flex items-center gap-1.5 transition-colors ${interactions.isLiked ? "text-pink-500" : "hover:text-pink-400"}`}>
+              <Heart size={16} className={interactions.isLiked ? "fill-current" : ""} /> {interactions.likes}
+            </button>
+            <button onClick={toggleSave} className={`flex items-center gap-1.5 transition-colors ${interactions.isSaved ? "text-yellow-500" : "hover:text-yellow-400"}`}>
+              <Bookmark size={16} className={interactions.isSaved ? "fill-current" : ""} /> {interactions.saves}
+            </button>
+            {project.githubUrl && (
+              <div className="flex items-center gap-1.5" title="GitHub Clicks">
+                <Code2 size={16} /> {project.githubClicks || 0}
+              </div>
+            )}
+            {project.liveUrl && (
+              <div className="flex items-center gap-1.5" title="Live Demo Clicks">
+                <Globe size={16} /> {project.liveClicks || 0}
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3">
           {project.githubUrl && (
-            <a 
-              href={project.githubUrl} 
-              target="_blank" 
-              rel="noreferrer"
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-[#238636] hover:bg-[#2ea043] text-white rounded-md text-sm font-semibold transition-colors shadow-sm"
-            >
-              <Code2 size={16} />
-              Code
-            </a>
+            <div className="flex rounded-md shadow-sm overflow-hidden border border-slate-700 h-[38px]">
+              <a 
+                href={project.githubUrl} 
+                target="_blank" 
+                rel="noreferrer"
+                onClick={handleGithubClick}
+                className="flex items-center justify-center gap-2 px-4 bg-[#238636] hover:bg-[#2ea043] text-white text-sm font-semibold transition-colors flex-1"
+              >
+                <Code2 size={16} />
+                Code
+              </a>
+              <button
+                onClick={handleFork}
+                disabled={forking}
+                className="flex items-center justify-center gap-1.5 px-3 bg-[#238636] hover:bg-[#2ea043] text-white border-l border-[#2ea043] text-sm font-semibold transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+                title={githubConnected ? "Fork Repository" : "Connect GitHub to Fork"}
+              >
+                <GitFork size={16} className={forking ? "animate-pulse" : ""} />
+              </button>
+            </div>
           )}
           {project.liveUrl && (
             <a 
               href={project.liveUrl} 
               target="_blank" 
               rel="noreferrer"
+              onClick={handleLiveClick}
               className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 rounded-md text-sm font-semibold transition-colors shadow-sm"
             >
               <Globe size={16} />
               Live Demo
             </a>
           )}
+          </div>
         </div>
       </div>
 
@@ -132,6 +304,8 @@ export default function ProjectDetails() {
               </div>
             </div>
           </div>
+          
+          <ProjectComments projectId={project.id} />
         </div>
 
         {/* Right Column - Sidebar */}
@@ -164,12 +338,12 @@ export default function ProjectDetails() {
             <h3 className="text-sm font-semibold text-slate-200 mb-3">Resources</h3>
             <div className="flex flex-col gap-2">
               {project.githubUrl && (
-                <a href={project.githubUrl} target="_blank" rel="noreferrer" className="text-sm text-[#58a6ff] hover:underline flex items-center gap-2">
+                <a href={project.githubUrl} target="_blank" rel="noreferrer" onClick={handleGithubClick} className="text-sm text-[#58a6ff] hover:underline flex items-center gap-2">
                   <BookOpen size={14} /> Repository
                 </a>
               )}
               {project.liveUrl && (
-                <a href={project.liveUrl} target="_blank" rel="noreferrer" className="text-sm text-[#58a6ff] hover:underline flex items-center gap-2">
+                <a href={project.liveUrl} target="_blank" rel="noreferrer" onClick={handleLiveClick} className="text-sm text-[#58a6ff] hover:underline flex items-center gap-2">
                   <Globe size={14} /> Official Website
                 </a>
               )}

@@ -192,6 +192,22 @@ router.post("/blogs/:id/comments", guestIdentity, async (req, res, next) => {
     const io = req.app.get("io");
     if (io) io.emit("blog:new_comment", comment);
 
+    // Create notification
+    const blog = await prisma.blog.findUnique({ where: { id: req.params.id } });
+    const guest = await prisma.guestSession.findUnique({ where: { id: req.guestId } });
+    if (blog && blog.authorId !== req.guestId) {
+      await prisma.notification.create({
+        data: {
+          guestId: blog.authorId,
+          type: "COMMENT_BLOG",
+          title: "New Comment on Blog",
+          message: `${guest?.displayName || 'Someone'} commented on your blog "${blog.title}".`,
+          link: `/blog/${blog.slug}`,
+        }
+      });
+      if (io) io.to(blog.authorId).emit("notification:new", { message: "New comment on your blog!" });
+    }
+
     res.status(201).json(comment);
   } catch (err) {
     if (err.name === "ZodError") return res.status(400).json({ error: err.errors });
@@ -215,6 +231,22 @@ router.post("/blogs/:id/like", guestIdentity, async (req, res, next) => {
 
     const io = req.app.get("io");
     if (io) io.emit("blog:like_update", { blogId, likesCount });
+
+    // Create notification
+    const blog = await prisma.blog.findUnique({ where: { id: blogId } });
+    const guest = await prisma.guestSession.findUnique({ where: { id: guestId } });
+    if (blog && blog.authorId !== guestId) {
+      await prisma.notification.create({
+        data: {
+          guestId: blog.authorId,
+          type: "LIKE_BLOG",
+          title: "Blog Liked!",
+          message: `${guest?.displayName || 'Someone'} liked your blog "${blog.title}".`,
+          link: `/blog/${blog.slug}`,
+        }
+      });
+      if (io) io.to(blog.authorId).emit("notification:new", { message: "Someone liked your blog!" });
+    }
 
     res.json({ success: true, likesCount, hasLiked: true });
   } catch (err) {

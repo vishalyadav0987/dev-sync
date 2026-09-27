@@ -25,7 +25,10 @@ async function request(path, { method = "GET", body, auth = false } = {}) {
     if (payload?.details) {
       errorMessage += ": " + JSON.stringify(payload.details);
     }
-    throw new Error(errorMessage);
+    const err = new Error(errorMessage);
+    // Preserve extra API fields (e.g. requireReauth) so callers can inspect them
+    Object.assign(err, payload);
+    throw err;
   }
   if (res.status === 204) return null;
   return res.json();
@@ -143,6 +146,9 @@ export const api = {
   addBookmark: (problemId, data) => request(`/visualizations/${problemId}/bookmarks`, { method: "POST", body: data, auth: true }),
   removeBookmark: (problemId, stepId) => request(`/visualizations/${problemId}/bookmarks/${stepId}`, { method: "DELETE", auth: true }),
   
+  // GitHub
+  disconnectGitHub: () => request(`/github/disconnect`, { method: "DELETE", auth: true }),
+  
   // Visualizations & Notes
   getVisualization: (problemId) => request(`/visualizations/${problemId}`, { auth: true }),
   getVisualizationHistory: (problemId) => request(`/visualizations/${problemId}/history`, { auth: true }),
@@ -172,10 +178,26 @@ export const api = {
   getUserBattleStats: (guestId) => request(`/battles/user/${guestId}`),
 
   // Projects (Phase 1)
-  getProjects: (params = {}) => request(`/projects?${new URLSearchParams(params)}`),
+  getProjects: (params = {}) => request(`/projects?${new URLSearchParams(params)}`, { auth: true }),
   getProject: (slug) => request(`/projects/${slug}`),
   createProject: (data) => request(`/projects`, { method: "POST", body: data, auth: true }),
   updateProject: (id, data) => request(`/projects/${id}`, { method: "PATCH", body: data, auth: true }),
   deleteProject: (id) => request(`/projects/${id}`, { method: "DELETE", auth: true }),
-};
 
+  // Notifications
+  getNotifications: () => request(`/notifications`, { auth: true }),
+  getUnreadNotificationCount: () => request(`/notifications/unread-count`, { auth: true }),
+  markAllNotificationsRead: () => request(`/notifications/read-all`, { method: "PUT", auth: true }),
+  markNotificationRead: (id) => request(`/notifications/${id}/read`, { method: "PUT", auth: true }),
+
+  // Projects (Phase 2 - Engagement)
+  getProjectInteractions: (id) => request(`/projects/${id}/interactions`, { auth: true }),
+  likeProject: (id) => request(`/projects/${id}/like`, { method: "POST", auth: true }),
+  saveProject: (id) => request(`/projects/${id}/save`, { method: "POST", auth: true }),
+  forkProject: (id) => request(`/projects/${id}/fork`, { method: "POST", auth: true }),
+  viewProject: (id) => request(`/projects/${id}/view`, { method: "POST", auth: true }),
+  clickProjectGithub: (id) => request(`/projects/${id}/click/github`, { method: "POST", auth: true }),
+  clickProjectLive: (id) => request(`/projects/${id}/click/live`, { method: "POST", auth: true }),
+  getProjectComments: (id) => request(`/projects/${id}/comments`, { auth: true }),
+  addProjectComment: (id, body) => request(`/projects/${id}/comments`, { method: "POST", body: { body }, auth: true }),
+};

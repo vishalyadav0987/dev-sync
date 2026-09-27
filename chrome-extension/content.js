@@ -9,7 +9,7 @@ script.onload = function() {
 let lastAcceptedProblem = null;
 let lastSubmissionTime = 0;
 
-function notifyAccepted() {
+function notifyAccepted(submissionId, language) {
     const now = Date.now();
     const problemSlugMatch = window.location.pathname.match(/\/problems\/([^\/]+)/);
     const problemSlug = problemSlugMatch ? problemSlugMatch[1] : null;
@@ -26,10 +26,30 @@ function notifyAccepted() {
     lastAcceptedProblem = problemSlug;
     lastSubmissionTime = now;
 
-    console.log("LeetCode Submission Accepted detected via DOM!");
+    let finalSubmissionId = submissionId;
+    if (!finalSubmissionId) {
+        const urlMatch = window.location.pathname.match(/\/submissions\/(?:detail\/)?(\d+)/);
+        if (urlMatch) {
+            finalSubmissionId = urlMatch[1];
+        } else {
+            finalSubmissionId = now.toString();
+        }
+    }
+
+    console.log("LeetCode Submission Accepted detected! Submission ID:", finalSubmissionId);
+    
+    // In MV3, sendMessage without a callback returns a Promise. We must catch it.
     chrome.runtime.sendMessage({
         type: 'PROCESS_SUBMISSION',
-        payload: { submissionId: now.toString(), problemSlug }
+        payload: { submissionId: finalSubmissionId, problemSlug, language }
+    }).catch((error) => {
+        if (error.message && error.message.includes("Extension context invalidated")) {
+            console.error("Extension context invalidated. Please refresh the page.");
+            alert("DevPortfolio Extension was updated in the background. Please refresh this page (Cmd+R or Ctrl+R) to reconnect it!");
+        } else {
+            console.error("Error sending message to extension:", error);
+            alert("DevPortfolio Sync Error: " + error.message);
+        }
     });
 }
 
@@ -38,7 +58,8 @@ window.addEventListener('message', (event) => {
     if (event.source !== window) return;
 
     if (event.data.type === 'LEETCODE_SUBMISSION_ACCEPTED') {
-        notifyAccepted();
+        const payload = event.data.payload || {};
+        notifyAccepted(payload.submissionId, payload.language);
     }
 });
 

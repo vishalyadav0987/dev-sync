@@ -52,6 +52,7 @@ model Problem {
   spaceComplexity String?
   edgeCases       String[]   @default([])
   approachNotes   String?    @db.Text
+  approachImageUrl String?   @db.Text
   visualHtml      String?    @db.Text   // sanitized HTML/SVG snippet for logic visualization
   
   // LeetCode Sync Data
@@ -93,6 +94,7 @@ model ProblemApproach {
   timeComplexity  String?
   spaceComplexity String?
   approachNotes   String?  @db.Text
+  approachImageUrl String? @db.Text
   visualHtml      String?  @db.Text
   
   order           Int      @default(0)
@@ -138,6 +140,17 @@ model GuestSession {
   wonBattles           BattleResult[]
   extensionSubmissions ExtensionSubmission[]
   publishedProjects    PublishedProject[]
+  projectLikes         ProjectLike[]
+  projectComments      ProjectComment[]
+  savedProjects        SavedProject[]
+
+  // GitHub OAuth Integration
+  githubId             String?        @unique
+  githubUsername       String?
+  githubAccessToken    String?        @db.Text
+  githubAvatarUrl      String?
+
+  notifications        Notification[]
 }
 
 // ── Extension-submitted LeetCode submissions (real-time sync) ───
@@ -458,11 +471,73 @@ model PublishedProject {
   liveUrl     String?
   coverImage  String?
   tags        String[] @default([])
-  visibility  String   @default("PUBLIC") // PUBLIC | UNLISTED
+  visibility  String   @default("PUBLIC") // PUBLIC | UNLISTED | DRAFT
+  views       Int      @default(0)
+  githubClicks Int     @default(0)
+  liveClicks   Int     @default(0)
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   publishedAt DateTime?
 
+  likes       ProjectLike[]
+  comments    ProjectComment[]
+  savedBy     SavedProject[]
+
   @@index([ownerId])
+}
+
+// ── Project Engagement (Phase 2) ─────────────────────────────────
+model ProjectLike {
+  id        String       @id @default(uuid())
+  projectId String
+  project   PublishedProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  guestId   String
+  guest     GuestSession @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+
+  @@unique([projectId, guestId])
+  @@index([projectId])
+  @@index([guestId])
+}
+
+model ProjectComment {
+  id        String       @id @default(uuid())
+  projectId String
+  project   PublishedProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    GuestSession @relation(fields: [authorId], references: [id])
+  body      String       @db.Text
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([projectId])
+}
+
+model SavedProject {
+  id        String       @id @default(uuid())
+  projectId String
+  project   PublishedProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  guestId   String
+  guest     GuestSession @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+
+  @@unique([projectId, guestId])
+  @@index([projectId])
+  @@index([guestId])
+}
+
+// ── Notifications ──────────────────────────────────────────────────
+model Notification {
+  id          String       @id @default(uuid())
+  guestId     String
+  guest       GuestSession @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  type        String       // LIKE_PROJECT, COMMENT_PROJECT, FORK_PROJECT, LIKE_BLOG, COMMENT_BLOG
+  title       String
+  message     String
+  link        String?      
+  isRead      Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+
+  @@index([guestId])
 }

@@ -1,13 +1,19 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { Search, Hash, Code2, Globe } from "lucide-react";
-import { api } from "../../lib/api";
+import { Link, useNavigate } from "react-router-dom";
+import { Calendar, Code2, Eye, Globe, Heart, MessageSquare, Search, Tag, User, Hash } from "lucide-react";
+import { api, socket } from "../../lib/api";
 import { formatDistanceToNow } from "date-fns";
+import { GitFork, GitBranch } from "lucide-react";
+import { API_BASE_URL } from "../../lib/api";
+import { getGuestId } from "../../hooks/useGuestId";
 
 export default function ExploreProjects() {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [githubConnected, setGithubConnected] = useState(false);
+  const [forkingId, setForkingId] = useState(null);
 
   // Popular tags mock for now
   const popularTags = ["React", "Node.js", "Fullstack", "Machine Learning", "Portfolio"];
@@ -15,10 +21,14 @@ export default function ExploreProjects() {
   useEffect(() => {
     async function load() {
       try {
-        const data = await api.getProjects();
+        const [data, stats] = await Promise.all([
+          api.getProjects(),
+          api.getGuestStats().catch(() => ({}))
+        ]);
         setProjects(data.projects || []);
+        setGithubConnected(stats.githubConnected || false);
       } catch (err) {
-        console.error("Failed to load projects", err);
+        console.error("Failed to load projects:", err);
       } finally {
         setLoading(false);
       }
@@ -26,11 +36,78 @@ export default function ExploreProjects() {
     load();
   }, []);
 
-  const filteredProjects = projects.filter(p => 
-    p?.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  useEffect(() => {
+    const handleStatsUpdated = ({ projectId, updates }) => {
+      setProjects(prev => prev.map(p => {
+        if (p.id === projectId) {
+          return {
+            ...p,
+            ...updates,
+            _count: {
+              ...p._count,
+              ...(updates._count || {})
+            }
+          };
+        }
+        return p;
+      }));
+    };
+
+    socket.on("project:statsUpdated", handleStatsUpdated);
+    return () => {
+      socket.off("project:statsUpdated", handleStatsUpdated);
+    };
+  }, []);
+
+  const filteredProjects = projects.filter(p =>
+    p?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p?.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p?.tags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
   );
+
+  const handleGithubClick = async (e, project) => {
+    e.stopPropagation();
+    api.clickProjectGithub(project.id).catch(console.error);
+    setProjects(prev => prev.map(p => p.id === project.id ? { ...p, githubClicks: (p.githubClicks || 0) + 1 } : p));
+    window.open(project.githubUrl, '_blank');
+  };
+
+  const handleLiveClick = (e, project) => {
+    e.stopPropagation();
+    api.clickProjectLive(project.id).catch(console.error);
+    setProjects(prev => prev.map(p => p.id === project.id ? { ...p, liveClicks: (p.liveClicks || 0) + 1 } : p));
+    window.open(project.liveUrl, '_blank');
+  };
+
+  const handleConnectGithub = () => {
+    const guestId = getGuestId();
+    window.location.href = `${API_BASE_URL}/github/login?guestId=${guestId}`;
+  };
+
+  const handleFork = async (e, project) => {
+    e.stopPropagation();
+    if (!githubConnected) {
+      handleConnectGithub();
+      return;
+    }
+    setForkingId(project.id);
+    try {
+      const res = await api.forkProject(project.id);
+      if (res.success && res.project) {
+        navigate(`/projects/${res.project.slug}`);
+      }
+    } catch (err) {
+      if (err?.requireReauth) {
+        setGithubConnected(false);
+        handleConnectGithub();
+        return;
+      }
+      console.error("Failed to fork project", err);
+      alert(err.message || "Failed to fork project");
+    } finally {
+      setForkingId(null);
+    }
+  };
 
   return (
     <div className="w-full relative z-10 space-y-8">
@@ -41,18 +118,26 @@ export default function ExploreProjects() {
             <h1 className="text-4xl md:text-5xl font-black text-white tracking-tight">Explore Projects</h1>
             <p className="text-slate-400 text-lg mt-1">Discover what the community is building.</p>
           </div>
+          {!githubConnected && (
+            <button
+              onClick={handleConnectGithub}
+              className="flex items-center justify-center gap-2 py-3 px-6 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-2xl text-slate-200 font-medium transition-colors"
+            >
+              <GitBranch className="w-5 h-5" />
+              Connect GitHub to Fork
+            </button>
+          )}
         </div>
-        
-        <div className="relative max-w-2xl">
-          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
-            <Search size={20} />
-          </div>
+
+        {/* Search Bar */}
+        <div className="relative group max-w-2xl">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 group-focus-within:text-indigo-400 transition-colors" />
           <input
             type="text"
-            placeholder="Search projects by name, description, or tags..."
+            placeholder="Search projects..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-4 rounded-full bg-slate-900/50 border border-slate-700/60 focus:border-indigo-500 focus:bg-slate-900/80 outline-none transition-colors text-lg text-slate-200 placeholder:text-slate-500 shadow-inner"
+            className="w-full bg-slate-900/60 border border-slate-700/50 rounded-2xl pl-12 pr-4 py-3 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
           />
         </div>
 
@@ -70,9 +155,29 @@ export default function ExploreProjects() {
       {/* Results */}
       <div>
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="h-64 bg-slate-800/40 rounded-3xl border border-slate-800/60 animate-pulse"></div>
-            <div className="h-64 bg-slate-800/40 rounded-3xl border border-slate-800/60 animate-pulse"></div>
+          <div className="grid grid-cols-1 gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="bg-slate-900/40 border border-slate-800/60 rounded-3xl p-6 flex flex-col gap-4 animate-pulse h-[200px]">
+                <div className="h-8 bg-slate-800/60 rounded-lg w-3/4 mb-2"></div>
+                <div className="h-4 bg-slate-800/60 rounded w-full"></div>
+                <div className="h-4 bg-slate-800/60 rounded w-5/6"></div>
+                <div className="flex gap-2 mt-1">
+                  <div className="h-6 bg-slate-800/60 rounded w-16"></div>
+                  <div className="h-6 bg-slate-800/60 rounded w-20"></div>
+                </div>
+                <div className="mt-auto pt-4 flex items-center justify-between border-t border-slate-800/60">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-slate-800/60"></div>
+                    <div className="h-4 bg-slate-800/60 rounded w-24"></div>
+                  </div>
+                  <div className="flex gap-4">
+                    <div className="h-4 bg-slate-800/60 rounded w-16"></div>
+                    <div className="h-4 bg-slate-800/60 rounded w-12"></div>
+                    <div className="h-4 bg-slate-800/60 rounded w-12"></div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         ) : filteredProjects.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 px-4 text-center bg-slate-900/20 rounded-3xl border border-slate-800/60 border-dashed backdrop-blur-sm">
@@ -85,7 +190,7 @@ export default function ExploreProjects() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6">
             {filteredProjects.map((project) => {
               if (!project || !project.id) return null;
               let dateStr = "Unknown";
@@ -93,66 +198,82 @@ export default function ExploreProjects() {
                 if (project.publishedAt) {
                   dateStr = formatDistanceToNow(new Date(project.publishedAt)) + " ago";
                 }
-              } catch (e) {}
+              } catch (e) { }
 
               return (
-              <div key={project.id} className="group bg-slate-900/40 border border-slate-800/60 rounded-3xl p-6 shadow-xl hover:shadow-indigo-500/10 hover:border-indigo-500/50 transition-all flex flex-col gap-4 backdrop-blur-sm relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-[40px] group-hover:bg-indigo-500/10 transition-colors pointer-events-none" />
-                
-                <div className="flex justify-between items-start">
-                    <Link to={`/projects/${project.slug}`} className="block">
-                        <h3 className="text-2xl font-bold text-slate-100 group-hover:text-indigo-400 transition-colors">
-                        {project.name || "Untitled"}
-                        </h3>
-                    </Link>
-                    {project.coverImage && (
-                         <img src={project.coverImage} alt={project.name} className="w-12 h-12 rounded-xl object-cover border border-slate-700/50" />
-                    )}
-                </div>
+                <div key={project.id} onClick={() => navigate(`/projects/${project.slug}`)} className="cursor-pointer group bg-slate-900/40 border border-slate-800/60 rounded-3xl p-6 shadow-xl hover:shadow-indigo-500/10 hover:border-indigo-500/50 transition-all flex flex-col gap-3 backdrop-blur-sm relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-[40px] group-hover:bg-indigo-500/10 transition-colors pointer-events-none" />
 
-                <p className="text-slate-400/80 text-sm line-clamp-2 leading-relaxed">
+                  <h3 className="text-2xl font-bold text-slate-100 group-hover:text-indigo-400 transition-colors pr-8">
+                    {project.name || "Untitled"}
+                  </h3>
+
+                  <p className="text-slate-400/80 text-sm line-clamp-3 leading-relaxed">
                     {project.description}
-                </p>
+                  </p>
 
-                {project.tags && project.tags.length > 0 && (
+                  {project.tags && project.tags.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-1">
-                        {project.tags.slice(0, 3).map((tag, i) => (
-                            <span key={i} className="text-xs font-medium px-2.5 py-1 bg-slate-800/80 text-slate-300 rounded-md border border-slate-700/50">
-                                {tag}
-                            </span>
-                        ))}
-                        {project.tags.length > 3 && (
-                            <span className="text-xs font-medium px-2.5 py-1 bg-slate-800/50 text-slate-400 rounded-md">
-                                +{project.tags.length - 3}
-                            </span>
-                        )}
+                      {project.tags.slice(0, 3).map((tag, i) => (
+                        <span key={i} className="text-xs font-medium px-2.5 py-1 bg-slate-800/80 text-slate-300 rounded-md border border-slate-700/50">
+                          {tag}
+                        </span>
+                      ))}
+                      {project.tags.length > 3 && (
+                        <span className="text-xs font-medium px-2.5 py-1 bg-slate-800/50 text-slate-400 rounded-md">
+                          +{project.tags.length - 3}
+                        </span>
+                      )}
                     </div>
-                )}
-                
-                <div className="mt-auto pt-4 flex items-center justify-between border-t border-slate-800/60 text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-md shadow-indigo-500/20">
-                      {project.owner?.displayName?.charAt(0) || "A"}
-                    </div>
-                    <span className="font-medium text-slate-300">{project.owner?.displayName || "Anonymous"}</span>
-                    <span className="text-slate-600 mx-1">•</span>
-                    <span className="text-slate-500">{dateStr}</span>
-                  </div>
+                  )}
 
-                  <div className="flex items-center gap-3">
-                      {project.githubUrl && (
-                          <a href={project.githubUrl} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-white transition-colors" title="GitHub Repository">
-                              <Code2 size={18} />
-                          </a>
+                  <div className="mt-auto pt-4 flex items-center justify-between border-t border-slate-800/60 text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-md shadow-indigo-500/20">
+                        {project.owner?.displayName?.charAt(0) || "A"}
+                      </div>
+                      <span className="font-medium text-slate-300">{project.owner?.displayName || "Anonymous"}</span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-4 text-slate-500">
+                      <span>{dateStr}</span>
+
+                      {project._count && (
+                        <div className="flex gap-3 items-center">
+                          <span className="flex items-center gap-1" title="Likes">
+                            <Heart size={14} className={project._count.likes > 0 ? "text-pink-500 fill-pink-500/20" : ""} /> {project._count.likes}
+                          </span>
+                          <span className="flex items-center gap-1" title="Comments">
+                            <MessageSquare size={14} /> {project._count.comments}
+                          </span>
+                          {project.githubUrl && (
+                            <button
+                              onClick={(e) => handleFork(e, project)}
+                              disabled={forkingId === project.id}
+                              className="flex items-center gap-1 hover:text-indigo-400 transition-colors"
+                              title="Fork Project"
+                            >
+                              <GitFork size={14} className={forkingId === project.id ? "animate-pulse text-indigo-400" : ""} /> Fork
+                            </button>
+                          )}
+                        </div>
                       )}
-                      {project.liveUrl && (
-                          <a href={project.liveUrl} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-indigo-400 transition-colors" title="Live Demo">
-                              <Globe size={18} />
-                          </a>
-                      )}
+
+                      <div className="flex items-center gap-4 border-l border-slate-700 pl-4 ml-1">
+                        {project.githubUrl && (
+                          <button onClick={(e) => handleGithubClick(e, project)} className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors" title="GitHub Repository">
+                            <Code2 size={16} /> <span className="text-xs">{project.githubClicks || 0}</span>
+                          </button>
+                        )}
+                        {project.liveUrl && (
+                          <button onClick={(e) => handleLiveClick(e, project)} className="flex items-center gap-1.5 text-slate-400 hover:text-indigo-400 transition-colors" title="Live Demo">
+                            <Globe size={16} /> <span className="text-xs">{project.liveClicks || 0}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
               );
             })}
           </div>

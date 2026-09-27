@@ -11,6 +11,15 @@ export function BattleInviteCard({ invite }) {
   // Check if battle is still joinable when the card mounts
   useEffect(() => {
     let cancelled = false;
+
+    // Battles live in Redis and expire quickly. Skip the network call
+    // for invites older than 1 hour — they're guaranteed to be gone.
+    const ageMs = Date.now() - new Date(invite.createdAt || 0).getTime();
+    if (ageMs > 60 * 60 * 1000) {
+      setStatus('ENDED');
+      return;
+    }
+
     async function checkStatus() {
       try {
         const data = await api.getBattle(invite.battleId);

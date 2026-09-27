@@ -11,6 +11,7 @@ const blankApproach = () => ({
   timeComplexity: "",
   spaceComplexity: "",
   approachNotes: "",
+  approachImageUrl: "",
   visualHtml: "",
 });
 
@@ -34,6 +35,7 @@ export default function AdminPage() {
     spaceComplexity: "",
     edgeCases: "",
     approachNotes: "",
+    approachImageUrl: "",
     visualHtml: "",
     categoryId: "",
     categoryName: "",
@@ -107,7 +109,7 @@ export default function AdminPage() {
       
       if (!editingId) {
         // Reset if it was a new creation
-        setForm({ ...form, title: "", statement: "", tags: "", cppCode: "", visualHtml: "", categoryName: "" });
+        setForm({ ...form, title: "", statement: "", tags: "", cppCode: "", visualHtml: "", approachImageUrl: "", categoryName: "" });
         setApproaches([]);
       } else {
         // Re-sync approach ids (server may have created new ones) so further
@@ -149,6 +151,7 @@ export default function AdminPage() {
         spaceComplexity: data.spaceComplexity || "",
         edgeCases: (data.edgeCases || []).join("\n"),
         approachNotes: data.approachNotes || "",
+        approachImageUrl: data.approachImageUrl || "",
         visualHtml: data.visualHtml || "",
         categoryId: data.categoryId || "",
         categoryName: "",
@@ -199,7 +202,7 @@ export default function AdminPage() {
         if (editingId === id) {
           setEditingId(null);
           setLoadSlug("");
-          setForm({ ...form, title: "", statement: "", tags: "", cppCode: "", visualHtml: "" });
+          setForm({ ...form, title: "", statement: "", tags: "", cppCode: "", visualHtml: "", approachImageUrl: "" });
           setApproaches([]);
         }
       } else {
@@ -282,6 +285,7 @@ export default function AdminPage() {
 
         <textarea placeholder="Edge cases (one per line)" value={form.edgeCases} onChange={update("edgeCases")} rows={3} className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
         <textarea placeholder="Approach notes" value={form.approachNotes} onChange={update("approachNotes")} rows={3} className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+        <input placeholder="Approach image URL (optional)" value={form.approachImageUrl} onChange={update("approachImageUrl")} className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
         <div className="overflow-hidden rounded-md border border-slate-700">
           <div className="bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wide border-b border-slate-700">
             Visual HTML/SVG (optional)

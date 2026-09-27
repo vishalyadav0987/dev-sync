@@ -101,6 +101,13 @@ export default function ApproachEditor({ approach, index, total, onChange, onRem
             className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
           />
 
+          <input
+            placeholder="Approach Image URL (optional)"
+            value={approach.approachImageUrl || ""}
+            onChange={set("approachImageUrl")}
+            className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+          />
+
           <div className="overflow-hidden rounded-md border border-slate-700">
             <div className="bg-slate-900 px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wide border-b border-slate-700">
               Visual HTML/SVG (this approach's own visualization)

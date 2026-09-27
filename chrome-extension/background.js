@@ -3,7 +3,8 @@ const BACKEND_URL = "http://localhost:4000/api/leetcode/extension";
 // 1. Listen for messages from content scripts and popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'PROCESS_SUBMISSION') {
-    handleSubmission(message.payload);
+    handleSubmission(message.payload).then(() => sendResponse({ success: true }));
+    return true; // Keep message channel open so service worker doesn't terminate
   } else if (message.type === 'CHECK_STATUS') {
     // Popup wants to know current status
     checkStatusAndRespond(sendResponse);
@@ -116,75 +117,117 @@ async function handleSubmission(payload) {
     try {
       const csrfToken = await getCsrfToken();
   
-      // 2. Fetch latest submissions from LeetCode GraphQL
-      const queryList = `
-        query submissionList($offset: Int!, $limit: Int!, $questionSlug: String!) {
-          submissionList(offset: $offset, limit: $limit, questionSlug: $questionSlug) {
-            submissions {
-              id
+      let actualSubmissionId = submissionId;
+      let code = "";
+      let language = payload.language || "";
+      let validDetailsFound = false;
+
+      // 2. Fetch actual code for the submission directly using submissionId
+      if (actualSubmissionId && actualSubmissionId.length < 13) {
+        const queryDetails = `
+          query submissionDetails($submissionId: Int!) {
+            submissionDetails(submissionId: $submissionId) {
+              code
               statusDisplay
-              lang
-              timestamp
+              lang {
+                name
+              }
             }
           }
-        }
-      `;
-  
-      const graphqlResponse = await fetch("https://leetcode.com/graphql", {
-        method: "POST",
-        headers: { 
-            "Content-Type": "application/json",
-            "x-csrftoken": csrfToken,
-            "Referer": "https://leetcode.com/"
-        },
-        body: JSON.stringify({ query: queryList, variables: { offset: 0, limit: 5, questionSlug: problemSlug } })
-      });
-  
-      const graphqlData = await graphqlResponse.json();
-      
-      if (!graphqlData.data || !graphqlData.data.submissionList || !graphqlData.data.submissionList.submissions) {
-        console.error("Failed to fetch submission details from LeetCode GraphQL", JSON.stringify(graphqlData));
-        return;
-      }
-
-    const submissions = graphqlData.data.submissionList.submissions;
-    const acceptedSubmission = submissions.find(s => s.statusDisplay === 'Accepted');
-    
-    if (!acceptedSubmission) {
-      console.error("No accepted submission found for", problemSlug);
-      return;
-    }
-
-    // 2.5 Fetch actual code for the submission
-    const queryDetails = `
-      query submissionDetails($submissionId: Int!) {
-        submissionDetails(submissionId: $submissionId) {
-          code
+        `;
+        const detailsResponse = await fetch("https://leetcode.com/graphql", {
+          method: "POST",
+          headers: { 
+              "Content-Type": "application/json",
+              "x-csrftoken": csrfToken,
+              "Referer": "https://leetcode.com/"
+          },
+          body: JSON.stringify({ query: queryDetails, variables: { submissionId: parseInt(actualSubmissionId) } })
+        });
+        const detailsData = await detailsResponse.json();
+        
+        if (detailsData.data && detailsData.data.submissionDetails) {
+          const details = detailsData.data.submissionDetails;
+          // Only sync Accepted submissions
+          if (details.statusDisplay && details.statusDisplay !== 'Accepted') {
+            console.log(`Skipping non-Accepted submission (${details.statusDisplay}) for ${problemSlug}`);
+            return;
+          }
+          code = details.code || "";
+          if (details.lang && details.lang.name) {
+             language = details.lang.name;
+          }
+          validDetailsFound = true;
         }
       }
-    `;
 
-    const detailsResponse = await fetch("https://leetcode.com/graphql", {
-      method: "POST",
-      headers: { 
-          "Content-Type": "application/json",
-          "x-csrftoken": csrfToken,
-          "Referer": "https://leetcode.com/"
-      },
-      body: JSON.stringify({ query: queryDetails, variables: { submissionId: parseInt(acceptedSubmission.id) } })
-    });
-
-    const detailsData = await detailsResponse.json();
-    const code = detailsData.data?.submissionDetails?.code || "";
-
-    // LeetCode's submissionList sometimes doesn't give problemTitle directly, 
-    // but we can just use the slug formatted as title for now, 
-    // the backend will handle title anyway via Gemini if it's new.
-    const problemTitle = problemSlug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-    const language = acceptedSubmission.lang;
+      // 2.5 Fallback: If direct fetch failed (e.g., fallback timestamp was used), fetch submissionList
+      if (!validDetailsFound) {
+        const queryList = `
+          query submissionList($offset: Int!, $limit: Int!, $questionSlug: String!) {
+            submissionList(offset: $offset, limit: $limit, questionSlug: $questionSlug) {
+              submissions {
+                id
+                statusDisplay
+                lang
+              }
+            }
+          }
+        `;
     
-    // We update submissionId to the actual one we found
-    const actualSubmissionId = acceptedSubmission.id;
+        const graphqlResponse = await fetch("https://leetcode.com/graphql", {
+          method: "POST",
+          headers: { 
+              "Content-Type": "application/json",
+              "x-csrftoken": csrfToken,
+              "Referer": "https://leetcode.com/"
+          },
+          body: JSON.stringify({ query: queryList, variables: { offset: 0, limit: 5, questionSlug: problemSlug } })
+        });
+    
+        const graphqlData = await graphqlResponse.json();
+        
+        if (!graphqlData.data || !graphqlData.data.submissionList || !graphqlData.data.submissionList.submissions) {
+          console.error("Failed to fetch submission list fallback from LeetCode GraphQL", JSON.stringify(graphqlData));
+          return;
+        }
+
+        const submissions = graphqlData.data.submissionList.submissions;
+        const acceptedSubmission = submissions.find(s => s.statusDisplay === 'Accepted');
+        
+        if (!acceptedSubmission) {
+          console.error("No accepted submission found for", problemSlug, ". LeetCode API might be delayed.");
+          return;
+        }
+
+        actualSubmissionId = acceptedSubmission.id;
+        language = acceptedSubmission.lang;
+
+        // Now fetch code for this actual id
+        const queryDetailsFallback = `
+          query submissionDetails($submissionId: Int!) {
+            submissionDetails(submissionId: $submissionId) {
+              code
+            }
+          }
+        `;
+        const detailsFallbackResponse = await fetch("https://leetcode.com/graphql", {
+          method: "POST",
+          headers: { 
+              "Content-Type": "application/json",
+              "x-csrftoken": csrfToken,
+              "Referer": "https://leetcode.com/"
+          },
+          body: JSON.stringify({ query: queryDetailsFallback, variables: { submissionId: parseInt(actualSubmissionId) } })
+        });
+        const detailsFallbackData = await detailsFallbackResponse.json();
+        code = detailsFallbackData.data?.submissionDetails?.code || "";
+      }
+
+      // LeetCode's submissionList sometimes doesn't give problemTitle directly, 
+      // but we can just use the slug formatted as title for now, 
+      // the backend will handle title anyway via Gemini if it's new.
+      const problemTitle = problemSlug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
     // 3. Send to our backend
     const submitResponse = await fetch(`${BACKEND_URL}/submission`, {
@@ -206,15 +249,23 @@ async function handleSubmission(payload) {
     
     if (submitResult.success && !submitResult.duplicate) {
       console.log(`Successfully synced submission for ${problemTitle}`);
+      // Clear the stats cache so the popup fetches fresh data (e.g. updated streak) next time it opens
+      await chrome.storage.local.remove('statsCache');
       showSuccessFireEffect();
     } else if (submitResult.duplicate) {
-      console.log(`Submission already synced for ${problemTitle}. No firework.`);
+      // Notify popup if it's open
+      chrome.runtime.sendMessage({ type: "SYNC_SUCCESS" }).catch(() => {});
     } else {
-      console.error(`Failed to sync submission for ${problemTitle}`);
+      console.error("Failed to sync submission", submitResponse.status);
     }
-
   } catch (error) {
     console.error("Error processing submission:", error);
+    // Send error to backend so developer can see it
+    fetch(`${BACKEND_URL}/log_error`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: error.message, stack: error.stack })
+    }).catch(() => {});
   }
 }
 

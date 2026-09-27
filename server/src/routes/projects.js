@@ -6,14 +6,17 @@ import { guestIdentity } from "../middleware/guestAuth.js";
 
 const router = Router();
 
-const projectSchema = z.object({
+const baseProjectSchema = z.object({
   name: z.string().max(100).optional().default(""),
   description: z.string().max(100000).default(""),
   githubUrl: z.string().url().optional().or(z.literal("")),
   liveUrl: z.string().url().optional().or(z.literal("")),
+  coverImage: z.string().url().optional().or(z.literal("")),
   tags: z.array(z.string()).default([]),
   visibility: z.enum(["PUBLIC", "UNLISTED", "DRAFT"]).default("PUBLIC"),
-}).superRefine((data, ctx) => {
+});
+
+const projectSchema = baseProjectSchema.superRefine((data, ctx) => {
   if (data.visibility !== "DRAFT") {
     if (data.name.length < 3) {
       ctx.addIssue({
@@ -76,7 +79,13 @@ router.get("/projects", optionalGuest, async (req, res, next) => {
           visibility: true,
           publishedAt: true,
           createdAt: true,
+          views: true,
+          githubClicks: true,
+          liveClicks: true,
           owner: { select: { id: true, displayName: true } },
+          _count: {
+            select: { likes: true, comments: true }
+          }
         },
       }),
       prisma.publishedProject.count({ where }),
@@ -154,7 +163,7 @@ router.post("/projects", guestIdentity, async (req, res, next) => {
 router.patch("/projects/:id", guestIdentity, async (req, res, next) => {
   try {
     const { id } = req.params;
-    const data = projectSchema.partial().parse(req.body);
+    const data = baseProjectSchema.partial().parse(req.body);
     
     const project = await prisma.publishedProject.findUnique({ where: { id } });
     if (!project) return res.status(404).json({ error: "Project not found" });
@@ -200,6 +209,93 @@ router.delete("/projects/:id", guestIdentity, async (req, res, next) => {
 
     await prisma.publishedProject.delete({ where: { id } });
     res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+// POST /api/projects/:id/fork
+router.post("/projects/:id/fork", guestIdentity, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const guestId = req.guestId;
+
+    const guest = await prisma.guestSession.findUnique({
+      where: { id: guestId },
+    });
+
+    if (!guest || !guest.githubAccessToken) {
+      return res.status(403).json({ error: "GitHub account not connected." });
+    }
+
+    const project = await prisma.publishedProject.findUnique({
+      where: { id },
+    });
+
+    if (!project || !project.githubUrl) {
+      return res.status(404).json({ error: "Project or GitHub URL not found." });
+    }
+
+    const urlParts = new URL(project.githubUrl).pathname.split('/').filter(Boolean);
+    if (urlParts.length < 2) {
+      return res.status(400).json({ error: "Invalid GitHub URL." });
+    }
+    const [owner, repo] = urlParts;
+
+    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/forks`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${guest.githubAccessToken}`,
+        "User-Agent": "DSA-Portfolio-App",
+        Accept: "application/vnd.github.v3+json",
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("Fork failed:", errorData);
+
+      // Token is expired/revoked — clear it and ask user to re-connect
+      if (response.status === 401) {
+        await prisma.guestSession.update({
+          where: { id: guestId },
+          data: {
+            githubId: null,
+            githubUsername: null,
+            githubAccessToken: null,
+            githubAvatarUrl: null,
+          },
+        });
+        return res.status(401).json({
+          error: "GitHub session expired. Please reconnect your GitHub account.",
+          requireReauth: true,
+        });
+      }
+
+      return res.status(response.status).json({ error: "Failed to fork repository on GitHub.", details: errorData });
+    }
+
+    const forkData = await response.json();
+    
+    // Create a notification for the project owner
+    if (project.ownerId !== guestId) {
+      await prisma.notification.create({
+        data: {
+          guestId: project.ownerId,
+          type: "FORK_PROJECT",
+          title: "Project Forked!",
+          message: `${guest.displayName} forked your project ${project.name}.`,
+          link: `/projects/${project.slug}`,
+        }
+      });
+      const io = req.app.get("io");
+      if (io) {
+        io.to(project.ownerId).emit("notification:new", { message: "Someone forked your project!" });
+      }
+    }
+
+    res.json({ forkUrl: forkData.html_url });
   } catch (error) {
     next(error);
   }

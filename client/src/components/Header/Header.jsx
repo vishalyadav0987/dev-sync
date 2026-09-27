@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Sparkles, Home, Layers, BookOpen, Clock, Activity, CloudDownload, Loader2, X, Trophy, Folder } from "lucide-react";
-import { api } from "../../lib/api";
+import { Sparkles, Home, Layers, BookOpen, Clock, Activity, CloudDownload, Loader2, X, Trophy, Folder, Bell, Check } from "lucide-react";
+import { api, socket } from "../../lib/api";
 
 function StreakBadge() {
   const [streak, setStreak] = useState(null);
@@ -56,6 +56,122 @@ const navLinkClass = ({ isActive }) =>
     ? "bg-slate-800 text-white shadow-sm ring-1 ring-white/10"
     : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
   }`;
+
+function NotificationBell() {
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifications, setNotifications] = useState([]);
+  const [isOpen, setIsOpen] = useState(false);
+
+  const fetchNotifications = async () => {
+    try {
+      const data = await api.getNotifications();
+      setNotifications(data.notifications || []);
+      const unreadData = await api.getUnreadNotificationCount();
+      setUnreadCount(unreadData.count || 0);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+
+    const handleNewNotification = (data) => {
+      // Optional: show a toast here
+      fetchNotifications();
+    };
+
+    socket.on("notification:new", handleNewNotification);
+    return () => {
+      socket.off("notification:new", handleNewNotification);
+    };
+  }, []);
+
+  const handleMarkAllRead = async () => {
+    try {
+      await api.markAllNotificationsRead();
+      setUnreadCount(0);
+      setNotifications(nots => nots.map(n => ({ ...n, isRead: true })));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleNotificationClick = async (notif) => {
+    if (!notif.isRead) {
+      try {
+        await api.markNotificationRead(notif.id);
+        setUnreadCount(prev => Math.max(0, prev - 1));
+        setNotifications(nots => nots.map(n => n.id === notif.id ? { ...n, isRead: true } : n));
+      } catch (err) {}
+    }
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="relative p-2 rounded-full hover:bg-slate-800 transition-colors text-slate-400 hover:text-slate-200"
+      >
+        <Bell className="w-5 h-5" />
+        {unreadCount > 0 && (
+          <span className="absolute top-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-indigo-500 text-[10px] font-bold text-white ring-2 ring-slate-900">
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <div className="absolute right-0 mt-2 w-80 bg-slate-900 border border-slate-700/50 rounded-xl shadow-2xl z-50 overflow-hidden">
+            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/20">
+              <h3 className="font-semibold text-slate-200">Notifications</h3>
+              {unreadCount > 0 && (
+                <button onClick={handleMarkAllRead} className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
+                  <Check className="w-3 h-3" /> Mark all read
+                </button>
+              )}
+            </div>
+            <div className="max-h-[400px] overflow-y-auto">
+              {notifications.length === 0 ? (
+                <div className="p-6 text-center text-slate-500 text-sm">
+                  No notifications yet.
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-800/60">
+                  {notifications.map(notif => (
+                    <div key={notif.id} className={`p-4 hover:bg-slate-800/40 transition-colors ${!notif.isRead ? 'bg-indigo-500/5' : ''}`}>
+                      <div className="flex justify-between items-start mb-1">
+                        <span className={`font-medium text-sm ${!notif.isRead ? 'text-indigo-300' : 'text-slate-300'}`}>
+                          {notif.title}
+                        </span>
+                        <span className="text-[10px] text-slate-500">
+                          {new Date(notif.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-400 mb-2">{notif.message}</p>
+                      {notif.link && (
+                        <NavLink 
+                          to={notif.link}
+                          onClick={() => handleNotificationClick(notif)}
+                          className="text-xs text-indigo-400 hover:text-indigo-300"
+                        >
+                          View Details &rarr;
+                        </NavLink>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 export default function Header() {
   const [syncStatusData, setSyncStatusData] = useState({ status: "LOADING" });
@@ -178,6 +294,7 @@ export default function Header() {
                 <span>{syncStatusData.status === "DISCONNECTED" || syncStatusData.status === "EXPIRED" ? "Connect" : "Sync"}</span>
               </button>
             </div>
+            <NotificationBell />
             <StreakBadge />
           </div>
         </div>

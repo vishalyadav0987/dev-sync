@@ -58,7 +58,7 @@ export function startLeetCodeSyncWorker() {
           }
         } catch (error) {
           console.error(`[LeetCode Worker] ❌ Error syncing session ${session.id}:`, error.message);
-          
+
           // Log error per user
           await prisma.guestSession.update({
             where: { id: session.id },

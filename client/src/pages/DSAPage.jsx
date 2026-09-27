@@ -181,6 +181,7 @@ export default function DSAPage({ categories: initialCategories = [] }) {
       timeComplexity: activeProblem.timeComplexity,
       spaceComplexity: activeProblem.spaceComplexity,
       approachNotes: activeProblem.approachNotes,
+      approachImageUrl: activeProblem.approachImageUrl,
       visualHtml: activeProblem.visualHtml
     }] : []),
     // If there are no alternative approaches, we just use the main one implicitly below.
@@ -314,6 +315,7 @@ export default function DSAPage({ categories: initialCategories = [] }) {
               spaceComplexity={displaySpace}
               edgeCases={activeProblem.edgeCases || []}
               approachNotes={displayNotes}
+              approachImageUrl={currentApproach?.approachImageUrl || activeProblem?.approachImageUrl}
               visualHtml={currentApproach?.visualHtml || activeProblem?.visualHtml}
             />
 

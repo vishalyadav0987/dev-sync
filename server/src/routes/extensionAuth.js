@@ -128,7 +128,14 @@ router.post("/submission", async (req, res, next) => {
     });
 
     if (existing) {
-      return res.json({ success: true, duplicate: true, submissionId: existing.id });
+      if (existing.status === "PROCESSED") {
+        return res.json({ success: true, duplicate: true, submissionId: existing.id });
+      } else {
+        // If it was FAILED or just RECEIVED (but got stuck/interrupted), delete it and retry
+        await prisma.extensionSubmission.delete({
+          where: { id: existing.id }
+        });
+      }
     }
 
     const submission = await prisma.extensionSubmission.create({
@@ -171,7 +178,7 @@ router.post("/submission", async (req, res, next) => {
           }
         });
 
-        await prisma.extensionSubmission.update({
+        await prisma.extensionSubmission.updateMany({
           where: { id: submission.id },
           data: { status: "PROCESSED" }
         });
@@ -217,7 +224,7 @@ router.post("/submission", async (req, res, next) => {
           }
         });
 
-        await prisma.extensionSubmission.update({
+        await prisma.extensionSubmission.updateMany({
           where: { id: submission.id },
           data: { status: "PROCESSED" }
         });
@@ -226,7 +233,7 @@ router.post("/submission", async (req, res, next) => {
       }
     } catch (processError) {
       console.error("[Extension] ❌ Error processing extension submission:", processError);
-      await prisma.extensionSubmission.update({
+      await prisma.extensionSubmission.updateMany({
         where: { id: submission.id },
         data: { status: "FAILED" }
       });

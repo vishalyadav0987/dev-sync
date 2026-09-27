@@ -26,6 +26,7 @@ export default function CodeAnalyzer({
   spaceComplexity,
   edgeCases = [],
   approachNotes,
+  approachImageUrl,
   visualHtml,
   initialVizViewCount = 0,
 }) {
@@ -62,12 +63,19 @@ export default function CodeAnalyzer({
         <StatPill label="Space Complexity" value={spaceComplexity} tone="space" />
       </div>
 
-      {approachNotes && (
+      {(approachNotes || approachImageUrl) && (
         <div className="mt-4">
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
             Approach
           </p>
-          <p className="text-sm leading-relaxed text-slate-300">{approachNotes}</p>
+          {approachNotes && (
+            <p className="text-sm leading-relaxed text-slate-300">{approachNotes}</p>
+          )}
+          {approachImageUrl && (
+            <div className="mt-4">
+              <img src={approachImageUrl} alt="Approach Visualization" className="max-w-full rounded-md border border-slate-700/50 shadow-sm" />
+            </div>
+          )}
         </div>
       )}
 

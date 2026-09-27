@@ -19,11 +19,12 @@
           const submissionId = submissionIdMatch ? submissionIdMatch[1] : null;
           const problemSlugMatch = window.location.pathname.match(/\/problems\/([^\/]+)/);
           const problemSlug = problemSlugMatch ? problemSlugMatch[1] : null;
+          const language = data.lang;
 
           if (submissionId && problemSlug) {
             window.postMessage({
               type: 'LEETCODE_SUBMISSION_ACCEPTED',
-              payload: { submissionId, problemSlug }
+              payload: { submissionId, problemSlug, language }
             }, '*');
           }
         }
@@ -37,17 +38,27 @@
             if (details.statusCode === 10 || details.statusDisplay === 'Accepted') {
               const problemSlugMatch = window.location.pathname.match(/\/problems\/([^\/]+)/);
               const problemSlug = problemSlugMatch ? problemSlugMatch[1] : null;
+              const language = details.lang?.name || details.lang || null;
               
-              // We need to parse the submission ID from the request body or response if possible, 
-              // but often it's in the URL if the user clicks a specific submission. 
-              // Since we don't have submissionId easily here, we might just fetch the latest.
-              // Let's pass a dummy or extract if available
-              const submissionId = details.submissionId || Date.now().toString();
-
+              let submissionId = null;
+              if (args[1] && args[1].body) {
+                try {
+                  const reqBody = typeof args[1].body === 'string' ? JSON.parse(args[1].body) : null;
+                  if (reqBody && reqBody.variables && reqBody.variables.submissionId) {
+                    submissionId = reqBody.variables.submissionId.toString();
+                  }
+                } catch(e) {}
+              }
+              if (!submissionId) {
+                const urlMatch = window.location.pathname.match(/\/submissions\/(?:detail\/)?(\d+)/);
+                if (urlMatch) submissionId = urlMatch[1];
+              }
+              
+              // Fallback to null so content.js can handle it or use Date.now() if needed, but avoid generating random ones in inject if we want to deduplicate
               if (problemSlug) {
                 window.postMessage({
                   type: 'LEETCODE_SUBMISSION_ACCEPTED',
-                  payload: { submissionId, problemSlug }
+                  payload: { submissionId, problemSlug, language }
                 }, '*');
               }
             }
@@ -81,11 +92,12 @@
               const submissionId = submissionIdMatch ? submissionIdMatch[1] : null;
               const problemSlugMatch = window.location.pathname.match(/\/problems\/([^\/]+)/);
               const problemSlug = problemSlugMatch ? problemSlugMatch[1] : null;
+              const language = data.lang;
 
               if (submissionId && problemSlug) {
                 window.postMessage({
                   type: 'LEETCODE_SUBMISSION_ACCEPTED',
-                  payload: { submissionId, problemSlug }
+                  payload: { submissionId, problemSlug, language }
                 }, '*');
               }
             }
@@ -96,25 +108,19 @@
               if (details.statusCode === 10 || details.statusDisplay === 'Accepted') {
                 const problemSlugMatch = window.location.pathname.match(/\/problems\/([^\/]+)/);
                 const problemSlug = problemSlugMatch ? problemSlugMatch[1] : null;
+                const language = details.lang?.name || details.lang || null;
                 
                 let submissionId = null;
-                if (args[1] && args[1].body) {
-                  try {
-                    const reqBody = typeof args[1].body === 'string' ? JSON.parse(args[1].body) : null;
-                    if (reqBody && reqBody.variables && reqBody.variables.submissionId) {
-                      submissionId = reqBody.variables.submissionId.toString();
-                    }
-                  } catch(e) {}
-                }
-                if (!submissionId) {
-                  const urlMatch = window.location.pathname.match(/\/submissions\/(\d+)/);
-                  if (urlMatch) submissionId = urlMatch[1];
+                // Try to get submissionId from url if present
+                const urlMatch = window.location.pathname.match(/\/submissions\/(?:detail\/)?(\d+)/);
+                if (urlMatch) {
+                  submissionId = urlMatch[1];
                 }
 
                 if (problemSlug && submissionId) {
                   window.postMessage({
                     type: 'LEETCODE_SUBMISSION_ACCEPTED',
-                    payload: { submissionId, problemSlug }
+                    payload: { submissionId, problemSlug, language }
                   }, '*');
                 }
               }

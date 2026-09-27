@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Remove Nodes (Reverse Strategy) Visualizer</title>
+  <style>
+    :root {
+      --bg-main: #1e1e1e;
+      --bg-panel: #252526;
+      --bg-deep: #1a1a1a;
+      --border: #3c3c3c;
+      --accent: #007acc;
+      --accent-hover: #005f9e;
+      --text-main: #cccccc;
+      --text-muted: #858585;
+      --keyword: #569cd6;
+      --type: #4ec9b0;
+      --string: #ce9178;
+      --comment: #6a9955;
+      --valid: #4caf50;
+      --invalid: #f44336;
+      --warn: #e5c07b;
+      --purple: #c586c0;
+      --sky: #9cdcfe;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      height: 100%;
+    }
+
+    body {
+      background: var(--bg-main);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow: hidden;
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #555;
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #777;
+    }
+
+    /* ---------- Top bar ---------- */
+    .top-bar {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      padding: 12px 20px;
+      border-radius: 8px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      flex-shrink: 0;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .top-bar label {
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+
+    .top-bar input {
+      background: var(--bg-main);
+      color: var(--type);
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 14px;
+      font-weight: bold;
+      outline: none;
+      transition: border-color .2s;
+      max-width: 350px;
+      flex: 1;
+      min-width: 160px;
+    }
+
+    .top-bar input:focus {
+      border-color: var(--accent);
+    }
+
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px;
+      transition: background .2s;
+      white-space: nowrap;
+    }
+
+    button:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+
+    button:disabled {
+      background: #3a3d41;
+      color: #777;
+      cursor: not-allowed;
+    }
+
+    button:focus-visible,
+    input:focus-visible {
+      outline: 2px solid var(--sky);
+      outline-offset: 2px;
+    }
+
+    .btn-random {
+      background: var(--warn);
+      color: #1e1e1e;
+    }
+
+    .btn-random:hover:not(:disabled) {
+      background: #d4b06e;
+    }
+
+    .btn-stop {
+      background: var(--invalid);
+    }
+
+    /* ---------- Layout ---------- */
+    .main-content {
+      display: flex;
+      gap: 16px;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .left-col {
+      flex: 1.2;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-height: 0;
+      min-width: 0;
+    }
+
+    .right-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-panel);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      min-height: 0;
+      min-width: 0;
+    }
+
+    .card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .logs-card {
+      flex: 1;
+      min-height: 160px;
+    }
+
+    /* ---------- Dashboard ---------- */
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+      gap: 10px;
+    }
+
+    .badge {
+      background: var(--bg-main);
+      border: 1px solid var(--border);
+      padding: 8px;
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      text-align: center;
+      transition: border-color .2s;
+    }
+
+    .badge.changed {
+      border-color: var(--warn);
+    }
+
+    .badge-lbl {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: bold;
+    }
+
+    .badge-val {
+      font-family: monospace;
+      font-size: 14px;
+      font-weight: bold;
+      color: var(--type);
+      word-break: break-all;
+    }
+
+    /* ---------- Visualizer area ---------- */
+    .visualizer-area {
+      justify-content: center;
+      align-items: flex-start;
+      background: var(--bg-deep);
+      border: 1px inset #333;
+      padding: 40px 20px 50px;
+      position: relative;
+      overflow-x: auto;
+      min-height: 240px;
+    }
+
+    .section-title {
+      position: absolute;
+      top: 10px;
+      left: 15px;
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: bold;
+      letter-spacing: 1px;
+    }
+
+    .ll-container {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      min-width: max-content;
+    }
+
+    .node-wrapper {
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .ll-node {
+      display: flex;
+      flex-direction: column;
+      width: 80px;
+      border: 2px solid var(--border);
+      border-radius: 6px;
+      background: #2d2d30;
+      transition: all .3s ease;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    }
+
+    .ll-node.hl {
+      border-color: var(--warn);
+      box-shadow: 0 0 12px rgba(229, 192, 123, .4);
+      transform: translateY(-3px);
+    }
+
+    .ll-node.deleted {
+      opacity: .3;
+      filter: grayscale(1);
+      border-style: dashed;
+    }
+
+    .ll-node-header {
+      background: #1e1e1e;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: bold;
+      text-align: center;
+      padding: 3px 0;
+      border-bottom: 1px solid var(--border);
+      border-radius: 4px 4px 0 0;
+    }
+
+    .ll-node-val {
+      font-size: 22px;
+      font-weight: bold;
+      color: #fff;
+      text-align: center;
+      padding: 12px 0;
+      border-bottom: 1px dashed #555;
+    }
+
+    .ll-node-next {
+      font-size: 11px;
+      font-family: monospace;
+      color: var(--type);
+      text-align: center;
+      padding: 5px 0;
+      background: #252526;
+      border-radius: 0 0 4px 4px;
+    }
+
+    .ll-node-next.null-ptr {
+      color: #777;
+    }
+
+    .ptr-container {
+      position: absolute;
+      bottom: -36px;
+      left: -10px;
+      right: -10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      justify-content: center;
+    }
+
+    .ptr-badge {
+      font-size: 10px;
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-weight: bold;
+      color: #fff;
+      font-family: monospace;
+      animation: pop .2s ease;
+    }
+
+    .bg-curr {
+      background: var(--accent);
+    }
+
+    .bg-prev {
+      background: var(--valid);
+      color: #1e1e1e;
+    }
+
+    .bg-next {
+      background: var(--warn);
+      color: #1e1e1e;
+    }
+
+    .bg-temp {
+      background: var(--purple);
+    }
+
+    .bg-newHead,
+    .bg-result {
+      background: var(--sky);
+      color: #1e1e1e;
+    }
+
+    .bg-head {
+      background: #d7ba7d;
+      color: #1e1e1e;
+    }
+
+    .empty-state {
+      color: var(--text-muted);
+      font-family: monospace;
+      font-size: 13px;
+    }
+
+    /* ---------- Controls & logs ---------- */
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      flex-shrink: 0;
+    }
+
+    .speed-ctrl {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .step-counter {
+      font-size: 12px;
+      color: #888;
+      font-weight: bold;
+      margin-top: 8px;
+    }
+
+    .log-box {
+      flex: 1;
+      min-height: 0;
+      background: var(--bg-main);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      font-family: monospace;
+      font-size: 13px;
+      color: #d4d4d4;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 12px;
+    }
+
+    .log-entry {
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, .03);
+      flex-shrink: 0;
+    }
+
+    .log-entry.latest {
+      border-left: 3px solid var(--accent);
+      background: rgba(0, 122, 204, .1);
+    }
+
+    .log-entry.success {
+      border-left: 3px solid var(--valid);
+      color: #89d185;
+      background: rgba(76, 175, 80, .1);
+    }
+
+    .log-entry.warn {
+      border-left: 3px solid var(--warn);
+      color: var(--warn);
+      background: rgba(229, 192, 123, .1);
+    }
+
+    .log-entry.error {
+      border-left: 3px solid var(--invalid);
+      color: #ff8888;
+      background: rgba(244, 67, 54, .1);
+    }
+
+    /* ---------- Code panel ---------- */
+    .code-header {
+      background: #1e1e1e;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: bold;
+      color: #aaa;
+      border-bottom: 1px solid var(--border);
+      letter-spacing: .5px;
+      flex-shrink: 0;
+    }
+
+    .code-body {
+      position: relative;
+      flex: 1;
+      padding: 12px 0;
+      overflow: auto;
+      min-height: 0;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 13.5px;
+      line-height: 1.6;
+    }
+
+    .code-line {
+      padding: 2px 16px;
+      white-space: pre;
+      display: flex;
+      min-width: max-content;
+      border-left: 3px solid transparent;
+    }
+
+    .line-num {
+      width: 35px;
+      color: #666;
+      text-align: right;
+      margin-right: 16px;
+      user-select: none;
+      flex-shrink: 0;
+    }
+
+    .code-line.active {
+      background: #264f78;
+      border-left-color: var(--accent);
+    }
+
+    .code-line.active .line-num {
+      color: #fff;
+    }
+
+    .kw {
+      color: var(--keyword);
+    }
+
+    .type {
+      color: var(--type);
+    }
+
+    .str {
+      color: var(--string);
+    }
+
+    .cmt {
+      color: var(--comment);
+    }
+
+    @keyframes pop {
+      0% {
+        transform: scale(.8);
+        opacity: 0;
+      }
+
+      100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
+
+    @media (max-width: 900px) {
+      body {
+        overflow: auto;
+        height: auto;
+      }
+
+      .main-content {
+        flex-direction: column;
+      }
+
+      .right-col {
+        min-height: 360px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="top-bar">
+    <label for="inputArr">Linked list values:</label>
+    <input type="text" id="inputArr" value="5, 2, 13, 3, 8" spellcheck="false">
+    <button id="btnRandom" class="btn-random">Random Array</button>
+    <button id="btnLoad">Load &amp; Restart</button>
+  </div>
+
+  <div class="main-content">
+    <div class="left-col">
+      <div class="card" style="padding: 12px;">
+        <div class="dashboard" id="dashboard"></div>
+      </div>
+
+      <div class="visualizer-area card">
+        <div class="section-title">Physical Memory Representation</div>
+        <div class="ll-container" id="llContainer"></div>
+      </div>
+
+      <div class="card logs-card">
+        <div class="controls">
+          <button id="btnPrev">◄ Previous</button>
+          <button id="btnNext">Next ►</button>
+          <button id="btnAuto">Auto Run</button>
+          <div class="speed-ctrl">
+            <label for="speedRange">Speed:</label>
+            <input type="range" id="speedRange" min="50" max="1500" value="800" style="width:80px;">
+          </div>
+        </div>
+        <span class="step-counter" id="stepCounter">Step 0 / 0</span>
+        <div class="log-box" id="logBox" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <div class="right-col">
+      <div class="code-header">Solution.cpp</div>
+      <div class="code-body" id="codeBody"></div>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    /* ============================================================
+     * 1. SOURCE CODE -- shown verbatim. (If the code ever contains a
+     *    backtick or "${", escape it as \` and \${ in this literal.)
+     * ============================================================ */
+    const rawCode = `/**
+ * Definition for singly-linked list.
+ * struct ListNode {
+ *     int val;
+ *     ListNode *next;
+ *     ListNode() : val(0), next(nullptr) {}
+ *     ListNode(int x) : val(x), next(nullptr) {}
+ *     ListNode(int x, ListNode *next) : val(x), next(next) {}
+ * };
+ */
+class Solution {
+public:
+    ListNode* reverseList(ListNode* head) {
+        ListNode* prev = NULL;
+        ListNode* curr = head;
+        ListNode* next = NULL;
+
+        while (curr != NULL) {
+            next = curr->next;
+            curr->next = prev;
+
+            prev = curr;
+            curr = next;
+        }
+
+        return prev;
+    }
+    ListNode* removeNodes(ListNode* head) {
+        ListNode* newHead = reverseList(head);
+        int maxValue = newHead->val;
+        ListNode* curr = newHead;
+        ListNode* next = curr->next;
+        ListNode* temp = newHead;
+        while (next != NULL) {
+            if (maxValue <= next->val) {
+                maxValue = next->val;
+                next = next->next;
+                temp = temp->next;
+            } else {
+                cout<< next->val;
+               temp->next = next->next;
+               next = temp->next;
+            }
+        }
+        
+        return reverseList(curr);
+    }
+};`;
+    const codeLines = rawCode.split('\n');
+
+    /* ============================================================
+     * 2. LINE MAP -- NEVER hardcode line numbers. Resolve each one by
+     *    a unique code snippet, searching after the enclosing function
+     *    so duplicate lines in different functions resolve correctly.
+     *    A typo throws immediately instead of highlighting the wrong line.
+     * ============================================================ */
+    function lineOf(snippet, afterLine = 0) {
+      for (let i = afterLine; i < codeLines.length; i++) {
+        if (codeLines[i].includes(snippet)) return i + 1; // 1-based
+      }
+      throw new Error(`lineOf: "${snippet}" not found after line ${afterLine}`);
+    }
+    const REV = lineOf('ListNode* reverseList(');
+    const RM = lineOf('ListNode* removeNodes(');
+    const L = Object.freeze({
+      rev: {
+        fn: REV,
+        prev: lineOf('ListNode* prev = NULL', REV),
+        curr: lineOf('ListNode* curr = head', REV),
+        next: lineOf('ListNode* next = NULL', REV),
+        loop: lineOf('while (curr != NULL)', REV),
+        saveNext: lineOf('next = curr->next', REV),
+        link: lineOf('curr->next = prev', REV),
+        advPrev: lineOf('prev = curr;', REV),
+        advCurr: lineOf('curr = next;', REV),
+        ret: lineOf('return prev', REV),
+      },
+      rm: {
+        fn: RM,
+        newHead: lineOf('reverseList(head)', RM),
+        max: lineOf('int maxValue', RM),
+        curr: lineOf('ListNode* curr = newHead', RM),
+        next: lineOf('ListNode* next = curr->next', RM),
+        temp: lineOf('ListNode* temp = newHead', RM),
+        loop: lineOf('while (next != NULL)', RM),
+        cond: lineOf('if (maxValue <= next->val)', RM),
+        upd: lineOf('maxValue = next->val;', RM),
+        advNext: lineOf('next = next->next', RM),
+        advTemp: lineOf('temp = temp->next', RM),
+        cout: lineOf('cout', RM),
+        bypass: lineOf('temp->next = next->next', RM),
+        ret: lineOf('return reverseList(curr)', RM),
+      },
+    });
+    L.rm.reNext = lineOf('next = temp->next', L.rm.bypass);
+
+    /* ============================================================
+     * 3. SYNTAX HIGHLIGHT -- single-pass tokenizer on the RAW line,
+     *    escaping each piece. (Chained .replace() calls corrupt their
+     *    own <span class="..."> output, e.g. "class" getting re-matched.)
+     * ============================================================ */
+    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const TOKEN_RE = /(\/\/.*$|\/\*.*?\*\/|\/\*.*$|^\s*\*.*$)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\b(class|struct|public|private|int|bool|void|if|else|while|for|return|cout|auto|const)\b|\b(ListNode|NULL|nullptr|true|false)\b/g;
+    function highlight(line) {
+      let out = '', last = 0;
+      line.replace(TOKEN_RE, (m, cmt, str, kw, type, offset) => {
+        out += esc(line.slice(last, offset));
+        const cls = cmt ? 'cmt' : str ? 'str' : kw ? 'kw' : 'type';
+        out += `<span class="${cls}">${esc(m)}</span>`;
+        last = offset + m.length;
+        return m;
+      });
+      return out + esc(line.slice(last));
+    }
+
+    /* ============================================================
+     * 4. TRACE -- mirrors the C++ exactly, statement by statement.
+     *    Each step is an immutable snapshot, so Prev/Next is O(1).
+     * ============================================================ */
+    const MAX_STEPS = 3000; // guard against runaway loops on odd input
+    let steps = [];
+
+    function generateSteps(values) {
+      const nodes = values.map((val, id) => ({ id, val, nextId: id < values.length - 1 ? id + 1 : null, deleted: false }));
+      const out = [];
+      const fmt = (id) => (id == null ? 'NULL' : `N${id}(${nodes[id].val})`);
+
+      const emit = (line, msg, { frame, phase, scalars = {}, ptrs = {}, hl = [], log = '' }) => {
+        if (out.length >= MAX_STEPS) throw new Error(`Step limit (${MAX_STEPS}) reached`);
+        out.push({ line, msg, frame, phase, scalars: { ...scalars }, ptrs: { ...ptrs }, hl, log, nodes: nodes.map((n) => ({ ...n })) });
+      };
+
+      // Shared by both calls -- one implementation, two call sites, just like the C++.
+      function traceReverse(head, phase) {
+        const frame = 'reverseList';
+        let prev = null, curr = head, next = null;
+        const at = (hl = [], log = '') => ({ frame, phase, ptrs: { prev, curr, next }, hl, log });
+
+        emit(L.rev.fn, `reverseList(head = ${fmt(head)}) called`, at());
+        emit(L.rev.prev, 'ListNode* prev = NULL', at());
+        emit(L.rev.curr, `ListNode* curr = head → ${fmt(curr)}`, at([curr]));
+        emit(L.rev.next, 'ListNode* next = NULL', at());
+        while (curr !== null) {
+          emit(L.rev.loop, `while (curr != NULL) → ${fmt(curr)} is not NULL, enter loop`, at([curr]));
+          next = nodes[curr].nextId;
+          emit(L.rev.saveNext, `next = curr->next → ${fmt(next)}`, at([curr]));
+          nodes[curr].nextId = prev;
+          emit(L.rev.link, `curr->next = prev → ${fmt(curr)}.next = ${fmt(prev)}`, at([curr], 'warn'));
+          prev = curr;
+          emit(L.rev.advPrev, `prev = curr → ${fmt(prev)}`, at());
+          curr = next;
+          emit(L.rev.advCurr, `curr = next → ${fmt(curr)}`, at());
+        }
+        emit(L.rev.loop, 'while (curr != NULL) → curr is NULL, exit loop', at());
+        emit(L.rev.ret, `return prev → ${fmt(prev)}`, at([prev].filter((x) => x !== null), 'success'));
+        return prev;
+      }
+
+      const frame = 'removeNodes';
+      const head = nodes.length ? 0 : null;
+      emit(L.rm.fn, `removeNodes(head = ${fmt(head)}) called`, { frame, phase: 'Init', ptrs: { head } });
+      emit(L.rm.newHead, 'Calling reverseList(head) to reverse the original list', { frame, phase: 'Reverse 1', ptrs: { head } });
+
+      const newHead = traceReverse(head, 'Reverse 1');
+      let maxValue, curr = null, next = null, temp = null;
+      const at = (phase, hl = [], log = '') => ({
+        frame, phase, scalars: { maxValue: maxValue ?? '-' }, ptrs: { newHead, curr, next, temp }, hl, log,
+      });
+
+      emit(L.rm.newHead, `ListNode* newHead = reverseList(head) → ${fmt(newHead)}`, at('Remove'));
+      if (newHead === null) {
+        emit(L.rm.max, 'newHead is NULL → newHead->val dereferences NULL (undefined behavior / crash)', at('Crash', [], 'error'));
+        return out;
+      }
+      maxValue = nodes[newHead].val;
+      emit(L.rm.max, `int maxValue = newHead->val → ${maxValue}`, at('Remove', [newHead]));
+      curr = newHead;
+      emit(L.rm.curr, `ListNode* curr = newHead → ${fmt(curr)}`, at('Remove'));
+      next = nodes[curr].nextId;
+      emit(L.rm.next, `ListNode* next = curr->next → ${fmt(next)}`, at('Remove'));
+      temp = newHead;
+      emit(L.rm.temp, `ListNode* temp = newHead → ${fmt(temp)}`, at('Remove'));
+
+      while (next !== null) {
+        emit(L.rm.loop, `while (next != NULL) → ${fmt(next)} is not NULL, enter loop`, at('Remove', [next]));
+        const v = nodes[next].val;
+        const keep = maxValue <= v;
+        emit(L.rm.cond, `if (maxValue <= next->val) → ${maxValue} <= ${v} is ${keep}`, at('Remove', [next]));
+        if (keep) {
+          maxValue = v;
+          emit(L.rm.upd, `maxValue = next->val → ${maxValue}`, at('Remove', [next], 'success'));
+          next = nodes[next].nextId;
+          emit(L.rm.advNext, `next = next->next → ${fmt(next)}`, at('Remove'));
+          temp = nodes[temp].nextId;
+          emit(L.rm.advTemp, `temp = temp->next → ${fmt(temp)}`, at('Remove'));
+        } else {
+          emit(L.rm.cout, `cout << next->val → prints ${v}`, at('Remove', [next]));
+          const removed = next;
+          nodes[temp].nextId = nodes[removed].nextId;
+          nodes[removed].deleted = true;
+          emit(L.rm.bypass, `temp->next = next->next → ${fmt(temp)}.next = ${fmt(nodes[temp].nextId)}, bypassing ${fmt(removed)}`, at('Remove', [temp, removed], 'error'));
+          next = nodes[temp].nextId;
+          emit(L.rm.reNext, `next = temp->next → ${fmt(next)}`, at('Remove'));
+        }
+      }
+      emit(L.rm.loop, 'while (next != NULL) → next is NULL, exit loop', at('Remove'));
+      emit(L.rm.ret, `return reverseList(curr) → reversing again from ${fmt(curr)}`, at('Reverse 2', [curr]));
+
+      const result = traceReverse(curr, 'Reverse 2');
+      const order = [];
+      for (let id = result, guard = 0; id !== null && guard <= nodes.length; id = nodes[id].nextId, guard++) order.push(nodes[id].val);
+      emit(L.rm.ret, `Done. Returned list: [${order.join(' → ')}]`, { frame, phase: 'Done', scalars: { maxValue }, ptrs: { result }, log: 'success' });
+      return out;
+    }
+
+    /* ============================================================
+     * 5. RENDER -- string-built DOM, cached element refs, no layout
+     *    thrash. Code panel scrolls itself (never the host page/iframe).
+     * ============================================================ */
+    const $ = (id) => document.getElementById(id);
+    const els = {
+      dashboard: $('dashboard'), ll: $('llContainer'), log: $('logBox'), counter: $('stepCounter'),
+      code: $('codeBody'), prev: $('btnPrev'), next: $('btnNext'), auto: $('btnAuto'), speed: $('speedRange'), input: $('inputArr'),
+    };
+    let currentStep = 0;
+    let activeLineEl = null;
+    let logHtml = [];
+
+    function fmtPtr(nodes, id) { return id == null ? 'NULL' : `N${id}(${nodes[id].val})`; }
+
+    function renderCode() {
+      els.code.innerHTML = codeLines.map((line, i) =>
+        `<div class="code-line" id="line-${i + 1}"><span class="line-num">${i + 1}</span><span>${highlight(line)}</span></div>`
+      ).join('');
+    }
+
+    function renderStep() {
+      if (!steps.length) return;
+      const s = steps[currentStep];
+      const prevStep = steps[currentStep - 1];
+
+      // Dashboard: frame + phase + every live local; changed values get outlined.
+      const entries = [
+        ['Frame', s.frame], ['Phase', s.phase],
+        ...Object.entries(s.scalars).map(([k, v]) => [k, v]),
+        ...Object.entries(s.ptrs).map(([k, v]) => [k, fmtPtr(s.nodes, v)]),
+      ];
+      const prevVals = prevStep
+        ? { ...prevStep.scalars, ...Object.fromEntries(Object.entries(prevStep.ptrs).map(([k, v]) => [k, fmtPtr(prevStep.nodes, v)])) }
+        : {};
+      els.dashboard.innerHTML = entries.map(([k, v]) => {
+        const changed = prevStep && k in prevVals && String(prevVals[k]) !== String(v);
+        return `<div class="badge${changed ? ' changed' : ''}"><span class="badge-lbl">${esc(k)}</span><span class="badge-val">${esc(v)}</span></div>`;
+      }).join('');
+
+      // Code highlight
+      activeLineEl?.classList.remove('active');
+      activeLineEl = $(`line-${s.line}`);
+      if (activeLineEl) {
+        activeLineEl.classList.add('active');
+        els.code.scrollTo({ top: activeLineEl.offsetTop - els.code.clientHeight / 2, behavior: 'smooth' });
+      }
+
+      // Linked list in physical memory order, pointer badges underneath
+      if (!s.nodes.length) {
+        els.ll.innerHTML = '<div class="empty-state">head → NULL (empty list)</div>';
+      } else {
+        els.ll.innerHTML = s.nodes.map((n) => {
+          const cls = ['ll-node', n.deleted && 'deleted', s.hl.includes(n.id) && 'hl'].filter(Boolean).join(' ');
+          const ptrs = Object.entries(s.ptrs).filter(([, id]) => id === n.id)
+            .map(([name]) => `<div class="ptr-badge bg-${esc(name)}">${esc(name)}</div>`).join('');
+          const nextTxt = n.nextId === null ? 'next: NULL' : `next: N${n.nextId}`;
+          return `<div class="node-wrapper"><div class="${cls}">` +
+            `<div class="ll-node-header">N${n.id}</div><div class="ll-node-val">${esc(n.val)}</div>` +
+            `<div class="ll-node-next${n.nextId === null ? ' null-ptr' : ''}">${nextTxt}</div></div>` +
+            `<div class="ptr-container">${ptrs}</div></div>`;
+        }).join('');
+      }
+
+      // Log: entries are pre-rendered once; only the latest one is re-classed.
+      els.log.innerHTML = logHtml.slice(0, currentStep).join('') + logEntry(currentStep, true);
+      els.log.scrollTop = els.log.scrollHeight;
+
+      els.counter.textContent = `Step ${currentStep + 1} / ${steps.length}`;
+      els.prev.disabled = currentStep === 0;
+      els.next.disabled = currentStep === steps.length - 1;
+    }
+
+    function logEntry(i, latest = false) {
+      const s = steps[i];
+      const cls = ['log-entry', latest && 'latest', s.log].filter(Boolean).join(' ');
+      return `<div class="${cls}">[Step ${i + 1}] ${esc(s.msg)}</div>`;
+    }
+
+    /* ============================================================
+     * 6. CONTROLS -- Prev/Next/Auto, live speed, keyboard shortcuts
+     * ============================================================ */
+    let autoTimer = null;
+    const autoDelay = () => 1550 - Number(els.speed.value);
+
+    function stepNext() { if (currentStep < steps.length - 1) { currentStep++; renderStep(); } else stopAuto(); }
+    function stepPrev() { if (currentStep > 0) { currentStep--; renderStep(); } }
+    function tick() {
+      if (currentStep >= steps.length - 1) return stopAuto();
+      stepNext();
+      autoTimer = setTimeout(tick, autoDelay()); // re-reads speed every tick
+    }
+    function toggleAuto() {
+      if (autoTimer) return stopAuto();
+      if (currentStep >= steps.length - 1) { currentStep = 0; renderStep(); }
+      els.auto.textContent = 'Pause';
+      els.auto.classList.add('btn-stop');
+      autoTimer = setTimeout(tick, autoDelay());
+    }
+    function stopAuto() {
+      clearTimeout(autoTimer);
+      autoTimer = null;
+      els.auto.textContent = 'Auto Run';
+      els.auto.classList.remove('btn-stop');
+    }
+
+    function parseInput(str) {
+      return (str.match(/-?\d+/g) || []).map(Number).slice(0, 12); // accepts "1,2,3" or "[1, 2, 3]"
+    }
+
+    function initSimulation() {
+      stopAuto();
+      const values = parseInput(els.input.value);
+      try {
+        steps = generateSteps(values);
+      } catch (err) {
+        steps = [{ line: 1, msg: `Error: ${err.message}`, frame: '-', phase: 'Error', scalars: {}, ptrs: {}, hl: [], log: 'error', nodes: [] }];
+      }
+      logHtml = steps.map((_, i) => logEntry(i));
+      currentStep = 0;
+      renderStep();
+    }
+
+    function applyRandom() {
+      const len = Math.floor(Math.random() * 5) + 4; // 4..8 nodes
+      els.input.value = Array.from({ length: len }, () => Math.floor(Math.random() * 25) + 1).join(', ');
+      initSimulation();
+    }
+
+    $('btnLoad').addEventListener('click', initSimulation);
+    $('btnRandom').addEventListener('click', applyRandom);
+    els.prev.addEventListener('click', stepPrev);
+    els.next.addEventListener('click', stepNext);
+    els.auto.addEventListener('click', toggleAuto);
+    els.input.addEventListener('keydown', (e) => { if (e.key === 'Enter') initSimulation(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.target === els.input) return;
+      if (e.key === 'ArrowRight') { e.preventDefault(); stepNext(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); stepPrev(); }
+      else if (e.key === ' ') { e.preventDefault(); toggleAuto(); }
+    });
+
+    renderCode();
+    initSimulation();
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,59 @@
+--- client/src/pages/Projects/ExploreProjects.jsx
++++ client/src/pages/Projects/ExploreProjects.jsx
+@@ -1,6 +1,6 @@
+ import { useState, useEffect } from "react";
+-import { Link } from "react-router-dom";
++import { Link, useNavigate } from "react-router-dom";
+ import { Search, Hash, Code2, Globe, Heart, MessageSquare } from "lucide-react";
+ import { api } from "../../lib/api";
+ import { formatDistanceToNow } from "date-fns";
+ 
+ export default function ExploreProjects() {
++  const navigate = useNavigate();
+   const [searchQuery, setSearchQuery] = useState("");
+   const [projects, setProjects] = useState([]);
+   const [loading, setLoading] = useState(true);
+@@ -95,20 +96,18 @@
+               } catch (e) {}
+ 
+               return (
+-              <div key={project.id} className="group bg-slate-900/40 border border-slate-800/60 rounded-3xl p-6 shadow-xl hover:shadow-indigo-500/10 hover:border-indigo-500/50 transition-all flex flex-col gap-4 backdrop-blur-sm relative overflow-hidden">
++              <div key={project.id} onClick={() => navigate(`/projects/${project.slug}`)} className="cursor-pointer group bg-slate-900/40 border border-slate-800/60 rounded-3xl p-6 shadow-xl hover:shadow-indigo-500/10 hover:border-indigo-500/50 transition-all flex flex-col gap-4 backdrop-blur-sm relative overflow-hidden">
+                 <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-[40px] group-hover:bg-indigo-500/10 transition-colors pointer-events-none" />
+                 
+                 <div className="flex justify-between items-start">
+-                    <Link to={`/projects/${project.slug}`} className="block">
+-                        <h3 className="text-2xl font-bold text-slate-100 group-hover:text-indigo-400 transition-colors">
+-                        {project.name || "Untitled"}
+-                        </h3>
+-                    </Link>
++                    <h3 className="text-2xl font-bold text-slate-100 group-hover:text-indigo-400 transition-colors">
++                    {project.name || "Untitled"}
++                    </h3>
+                     {project.coverImage && (
+                          <img src={project.coverImage} alt={project.name} className="w-12 h-12 rounded-xl object-cover border border-slate-700/50" />
+                     )}
+                 </div>
+ 
+-                <p className="text-slate-400/80 text-sm line-clamp-2 leading-relaxed">
++                <p className="text-slate-400/80 text-sm line-clamp-3 leading-relaxed">
+                     {project.description}
+                 </p>
+ 
+@@ -156,11 +155,11 @@
+                       <div className="flex items-center gap-3">
+                           {project.githubUrl && (
+-                              <a href={project.githubUrl} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-white transition-colors" title="GitHub Repository">
++                              <button onClick={(e) => { e.stopPropagation(); window.open(project.githubUrl, '_blank'); }} className="text-slate-400 hover:text-white transition-colors" title="GitHub Repository">
+                                   <Code2 size={18} />
+-                              </a>
++                              </button>
+                           )}
+                       {project.liveUrl && (
+-                          <a href={project.liveUrl} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-indigo-400 transition-colors" title="Live Demo">
++                          <button onClick={(e) => { e.stopPropagation(); window.open(project.liveUrl, '_blank'); }} className="text-slate-400 hover:text-indigo-400 transition-colors" title="Live Demo">
+                               <Globe size={18} />
+-                          </a>
++                          </button>
+                       )}
+                       </div>

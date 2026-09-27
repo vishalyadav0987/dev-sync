@@ -99,12 +99,13 @@ router.get("/sessions/stats", async (req, res, next) => {
   try {
     const guest = await prisma.guestSession.findUnique({
       where: { id: req.guestId },
-      select: { currentStreak: true, longestStreak: true, lastActiveDate: true },
+      select: { currentStreak: true, longestStreak: true, lastActiveDate: true, githubId: true },
     });
     res.json({
       streak: getEffectiveStreak(guest),
       longestStreak: guest?.longestStreak || 0,
       lastActiveDate: guest?.lastActiveDate || null,
+      githubConnected: !!guest?.githubId,
     });
   } catch (err) {
     next(err);

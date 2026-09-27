@@ -13,11 +13,14 @@ import blogsRouter from "./routes/blogs.js";
 import problemsRouter from "./routes/problems.js";
 import sessionsRouter from "./routes/sessions.js";
 import projectsRouter from "./routes/projects.js";
+import projectInteractionsRouter from "./routes/projectInteractions.js";
 import adminRoutes from "./routes/admin.js";
 import visualizationsRoutes from "./routes/visualizations.js";
 import leetcodeRoutes from "./routes/leetcode.js";
 import extensionAuthRoutes from "./routes/extensionAuth.js";
 import notesRouter from "./routes/notes.js";
+import githubAuthRoutes from "./routes/githubAuth.js";
+import notificationsRoutes from "./routes/notifications.js";
 import { startLeetCodeSyncWorker } from "./workers/leetcodeWorker.js";
 import { setupChatGateway } from "./services/chat/chat.gateway.js";
 import chatRoutes from "./routes/chat.js";
@@ -73,7 +76,11 @@ app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
 app.use("/api", problemsRouter);
 app.use("/api", blogsRouter);
+app.use("/api", githubAuthRoutes);
+app.use("/api", notificationsRoutes);
+app.use("/api", chatRoutes);
 app.use("/api", projectsRouter);
+app.use("/api", projectInteractionsRouter);
 app.use("/api/admin", adminRoutes);
 app.use("/api/visualizations", visualizationsRoutes);
 app.use("/api/leetcode", leetcodeRoutes);
@@ -95,7 +102,6 @@ app.use((err, _req, res, _next) => {
 const PORT = process.env.PORT || 4000;
 
 // Start background workers
-startLeetCodeSyncWorker();
 startExecutionWorker();
 
 httpServer.listen(PORT, () => console.log(`API and Socket.io listening on :${PORT}`));

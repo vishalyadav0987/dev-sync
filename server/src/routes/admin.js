@@ -14,6 +14,7 @@ const approachSchema = z.object({
   timeComplexity: z.string().optional().nullable(),
   spaceComplexity: z.string().optional().nullable(),
   approachNotes: z.string().optional().nullable(),
+  approachImageUrl: z.string().optional().nullable(),
   visualHtml: z.string().optional().nullable(),
   order: z.number().int().default(0),
 });
@@ -28,6 +29,7 @@ const problemBaseSchema = z.object({
   spaceComplexity: z.string().optional(),
   edgeCases: z.array(z.string()).default([]),
   approachNotes: z.string().optional(),
+  approachImageUrl: z.string().optional(),
   visualHtml: z.string().optional(),
   categoryId: z.string().uuid().optional(), // Now optional because we can provide categoryName instead
   categoryName: z.string().optional(),
