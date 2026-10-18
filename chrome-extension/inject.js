@@ -1,5 +1,15 @@
 // Inject script that overrides fetch and XHR to intercept submission results
 (function () {
+  // Track whether the user has actually clicked "Submit" in this page session.
+  // This prevents false positives when LeetCode loads old submission details
+  // (e.g., browsing the submissions tab of a previously solved problem).
+  let activeSubmitTimestamp = 0;
+
+  function isRecentSubmit() {
+    // Only consider it a real submission if the user clicked Submit within the last 60 seconds
+    return (Date.now() - activeSubmitTimestamp) < 60000;
+  }
+
   // 1. Intercept Fetch
   const originalFetch = window.fetch;
   window.fetch = async function (...args) {
@@ -10,6 +20,16 @@
       if (args[0] && typeof args[0] === 'string') url = args[0];
       else if (args[0] && args[0].url) url = args[0].url;
 
+      // Detect the actual Submit action: POST to /problems/<slug>/submit/
+      if (url.includes('/submit/') && args[1] && args[1].method === 'POST') {
+        activeSubmitTimestamp = Date.now();
+        console.log('[DevPortfolio] Submit action detected via fetch');
+        window.postMessage({ type: 'LEETCODE_SUBMIT_DETECTED' }, '*');
+      }
+
+      // Primary: Intercept the /check/ polling endpoint
+      // This endpoint is ONLY called when LeetCode is polling for the result
+      // of a submission the user just made. It is never called when browsing.
       if (url.includes('/submissions/detail/') && url.includes('/check/')) {
         const clonedResponse = response.clone();
         const data = await clonedResponse.json();
@@ -28,8 +48,10 @@
             }, '*');
           }
         }
-      } else if (url.includes('/graphql') || url.includes('/graphql/')) {
-        // Also try to intercept GraphQL submissionDetails
+      }
+      // Secondary: GraphQL submissionDetails — ONLY if a submit was recently triggered
+      // Without the isRecentSubmit() guard, this fires when you browse old submissions
+      else if ((url.includes('/graphql') || url.includes('/graphql/')) && isRecentSubmit()) {
         try {
           const clonedResponse = response.clone();
           const data = await clonedResponse.json();
@@ -54,8 +76,7 @@
                 if (urlMatch) submissionId = urlMatch[1];
               }
               
-              // Fallback to null so content.js can handle it or use Date.now() if needed, but avoid generating random ones in inject if we want to deduplicate
-              if (problemSlug) {
+              if (problemSlug && submissionId) {
                 window.postMessage({
                   type: 'LEETCODE_SUBMISSION_ACCEPTED',
                   payload: { submissionId, problemSlug, language }
@@ -77,6 +98,7 @@
 
   window.XMLHttpRequest.prototype.open = function(method, url) {
     this._url = url;
+    this._method = method;
     return xhrOpen.apply(this, arguments);
   };
 
@@ -85,6 +107,14 @@
       try {
         const url = this._url;
         if (url && typeof url === 'string') {
+          // Detect Submit action via XHR
+          if (url.includes('/submit/') && this._method === 'POST') {
+            activeSubmitTimestamp = Date.now();
+            console.log('[DevPortfolio] Submit action detected via XHR');
+            window.postMessage({ type: 'LEETCODE_SUBMIT_DETECTED' }, '*');
+          }
+
+          // Primary: /check/ polling (only happens during active submissions)
           if (url.includes('/submissions/detail/') && url.includes('/check/')) {
             const data = JSON.parse(this.responseText);
             if (data && data.state === 'SUCCESS' && data.status_msg === 'Accepted') {
@@ -101,7 +131,9 @@
                 }, '*');
               }
             }
-          } else if (url.includes('/graphql') || url.includes('/graphql/')) {
+          }
+          // Secondary: GraphQL — ONLY if user recently submitted
+          else if ((url.includes('/graphql') || url.includes('/graphql/')) && isRecentSubmit()) {
             const data = JSON.parse(this.responseText);
             if (data && data.data && data.data.submissionDetails) {
               const details = data.data.submissionDetails;
@@ -111,7 +143,6 @@
                 const language = details.lang?.name || details.lang || null;
                 
                 let submissionId = null;
-                // Try to get submissionId from url if present
                 const urlMatch = window.location.pathname.match(/\/submissions\/(?:detail\/)?(\d+)/);
                 if (urlMatch) {
                   submissionId = urlMatch[1];

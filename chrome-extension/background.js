@@ -170,33 +170,52 @@ async function handleSubmission(payload) {
                 id
                 statusDisplay
                 lang
+                timestamp
               }
             }
           }
         `;
     
-        const graphqlResponse = await fetch("https://leetcode.com/graphql", {
-          method: "POST",
-          headers: { 
-              "Content-Type": "application/json",
-              "x-csrftoken": csrfToken,
-              "Referer": "https://leetcode.com/"
-          },
-          body: JSON.stringify({ query: queryList, variables: { offset: 0, limit: 5, questionSlug: problemSlug } })
-        });
-    
-        const graphqlData = await graphqlResponse.json();
+        let acceptedSubmission = null;
+        let retryCount = 0;
+
+        while (retryCount < 4 && !acceptedSubmission) {
+            const graphqlResponse = await fetch("https://leetcode.com/graphql", {
+              method: "POST",
+              headers: { 
+                  "Content-Type": "application/json",
+                  "x-csrftoken": csrfToken,
+                  "Referer": "https://leetcode.com/"
+              },
+              body: JSON.stringify({ query: queryList, variables: { offset: 0, limit: 5, questionSlug: problemSlug } })
+            });
         
-        if (!graphqlData.data || !graphqlData.data.submissionList || !graphqlData.data.submissionList.submissions) {
-          console.error("Failed to fetch submission list fallback from LeetCode GraphQL", JSON.stringify(graphqlData));
-          return;
+            const graphqlData = await graphqlResponse.json();
+            
+            if (!graphqlData.data || !graphqlData.data.submissionList || !graphqlData.data.submissionList.submissions) {
+              console.error("Failed to fetch submission list fallback from LeetCode GraphQL", JSON.stringify(graphqlData));
+              return;
+            }
+
+            const submissions = graphqlData.data.submissionList.submissions;
+            
+            // Find an Accepted submission that is RECENT (within the last 10 minutes)
+            // This prevents syncing an old solution from last year if the user just submitted.
+            const tenMinutesAgo = (Date.now() / 1000) - 600;
+            acceptedSubmission = submissions.find(s => 
+                s.statusDisplay === 'Accepted' && 
+                parseInt(s.timestamp) > tenMinutesAgo
+            );
+            
+            if (!acceptedSubmission) {
+                console.log(`No recent accepted submission found for ${problemSlug} yet. Retrying in 2 seconds...`);
+                await new Promise(r => setTimeout(r, 2000));
+                retryCount++;
+            }
         }
 
-        const submissions = graphqlData.data.submissionList.submissions;
-        const acceptedSubmission = submissions.find(s => s.statusDisplay === 'Accepted');
-        
         if (!acceptedSubmission) {
-          console.error("No accepted submission found for", problemSlug, ". LeetCode API might be delayed.");
+          console.error("No recent accepted submission found for", problemSlug, "after retries. LeetCode API might be delayed.");
           return;
         }
 

@@ -57,7 +57,7 @@ router.get("/github/callback", async (req, res) => {
       console.error("GitHub token error:", tokenData);
       console.error("  → redirect_uri sent:", redirectUri);
       console.error("  → Make sure your GitHub OAuth App's callback URL matches exactly.");
-      return res.redirect(`${process.env.CLIENT_ORIGIN || "http://localhost:5173"}/projects/explore?error=github_auth_failed`);
+      return res.redirect(`${process.env.CLIENT_ORIGIN || "http://localhost:5173"}/projects?error=github_auth_failed`);
     }
 
     const accessToken = tokenData.access_token;

@@ -9,6 +9,12 @@ script.onload = function() {
 let lastAcceptedProblem = null;
 let lastSubmissionTime = 0;
 
+// This flag is set when inject.js detects a /submit/ API call.
+// The MutationObserver will ONLY look for "Accepted" text if this is true.
+// This prevents false-triggering when you just visit a previously-solved problem.
+let userJustSubmitted = false;
+let submitResetTimer = null;
+
 function notifyAccepted(submissionId, language) {
     const now = Date.now();
     const problemSlugMatch = window.location.pathname.match(/\/problems\/([^\/]+)/);
@@ -21,8 +27,6 @@ function notifyAccepted(submissionId, language) {
         return; 
     }
 
-    // Only allow triggering once per problem per page session to prevent endless loops
-    // If they submit again after 10s, it will trigger again, which is good.
     lastAcceptedProblem = problemSlug;
     lastSubmissionTime = now;
 
@@ -36,7 +40,7 @@ function notifyAccepted(submissionId, language) {
         }
     }
 
-    console.log("LeetCode Submission Accepted detected! Submission ID:", finalSubmissionId);
+    console.log("[DevPortfolio] Submission Accepted detected! Submission ID:", finalSubmissionId);
     
     // In MV3, sendMessage without a callback returns a Promise. We must catch it.
     chrome.runtime.sendMessage({
@@ -53,36 +57,55 @@ function notifyAccepted(submissionId, language) {
     });
 }
 
-// Listen for messages from the injected script (Network Interception)
+// Listen for messages from the injected script
 window.addEventListener('message', (event) => {
     if (event.source !== window) return;
 
+    // inject.js detected a /submit/ POST → arm the DOM observer for 60 seconds
+    if (event.data.type === 'LEETCODE_SUBMIT_DETECTED') {
+        console.log('[DevPortfolio] Submit detected — DOM observer armed');
+        userJustSubmitted = true;
+        if (submitResetTimer) clearTimeout(submitResetTimer);
+        submitResetTimer = setTimeout(() => { userJustSubmitted = false; }, 60000);
+    }
+
+    // inject.js detected an Accepted response from the network
     if (event.data.type === 'LEETCODE_SUBMISSION_ACCEPTED') {
         const payload = event.data.payload || {};
         notifyAccepted(payload.submissionId, payload.language);
     }
 });
 
-// Fallback: MutationObserver to watch for the "Accepted" text (DOM Interception)
+// Fallback: MutationObserver — ONLY armed after a real submit is detected
+// This catches edge cases where the /check/ endpoint doesn't fire but
+// the DOM updates with "Accepted" after the user clicks Submit.
+let domCheckTimeout = null;
 const observer = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-        if (mutation.type === 'childList' || mutation.type === 'characterData') {
-            // Check for the "Accepted" span which is usually colored green in LeetCode's new UI
-            // Typically it has data-e2e-locator="submission-result" or is just a span with color text-green-s
-            const spans = document.querySelectorAll('span, div');
-            for (let i = 0; i < spans.length; i++) {
-                const el = spans[i];
-                if (el.innerText && el.innerText.trim() === 'Accepted') {
-                    // Make sure it's the large success text, usually it has a specific green color class
-                    // or it appears near the runtime/memory stats.
-                    if ((typeof el.className === 'string' && (el.className.includes('green') || el.className.includes('success'))) || el.getAttribute('data-e2e-locator') === 'submission-result') {
-                        notifyAccepted();
-                        return;
-                    }
-                }
+    // CRITICAL: Do NOT check the DOM unless the user just clicked Submit.
+    // Without this guard, simply visiting a previously-solved problem
+    // would trigger the sync (because LeetCode shows "Accepted" in the DOM).
+    if (!userJustSubmitted) return;
+    if (domCheckTimeout) return;
+
+    domCheckTimeout = setTimeout(() => {
+        domCheckTimeout = null;
+        
+        // Strategy 1: Data attribute
+        const e2e = document.querySelector('[data-e2e-locator="submission-result"]');
+        if (e2e && e2e.textContent.includes('Accepted')) {
+            notifyAccepted();
+            return;
+        }
+
+        // Strategy 2: Specific green text class used by LeetCode
+        const greens = document.querySelectorAll('.text-green-s, .text-success, [class*="text-green-s"]');
+        for (const el of greens) {
+            if (el.textContent === 'Accepted') {
+                notifyAccepted();
+                return;
             }
         }
-    }
+    }, 500);
 });
 
 const startObserver = () => {

@@ -102,6 +102,7 @@ export default function App() {
               {/* Projects Layout */}
               <Route path="/projects" element={<ProjectLayout />}>
                 <Route index element={<ExploreProjects />} />
+                <Route path="explore" element={<ExploreProjects />} />
                 <Route path="publish" element={<PublishProject />} />
                 <Route path="edit/:slug" element={<PublishProject />} />
                 <Route path="my-projects" element={<MyProjects />} />
